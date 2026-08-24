@@ -10,7 +10,6 @@ import io
 import re
 import imaplib
 import email
-from email.header import decode_header
 from datetime import datetime, timedelta
 import base64
 
@@ -90,7 +89,7 @@ def parse_extracted_text(raw_text: str):
                 business_name = l[:30]
                 break
 
-    # 5. Monto Total y Desglose (Gravada 10%, Gravada 5%, Exenta)
+    # 5. Monto Total y Desglose
     amounts = []
     for line in lines:
         if any(k in line.lower() for k in ["total de la operación", "total a pagar", "total general", "total gs", "total:", "importe total"]):
@@ -108,7 +107,6 @@ def parse_extracted_text(raw_text: str):
 
     detected_amount = max(amounts) if amounts else 0.0
 
-    # Detección de si es Exenta
     is_exenta = any(k in lower for k in ["exentas", "exenta", "no gravado", "iva 0%"])
     is_gravada_5 = "5%" in lower or "5 por ciento" in lower
 
@@ -123,7 +121,7 @@ def parse_extracted_text(raw_text: str):
     else:
         gravada_10 = detected_amount if doc_type == "Factura" else 0.0
 
-    # 6. Detalle del Producto / Ítem
+    # 6. Detalle del Producto
     product_detail = f"{doc_type} - {business_name}"
     for line in lines:
         upper_line = line.upper()
@@ -169,13 +167,18 @@ async def process_document(file: UploadFile = File(...)):
     
     try:
         if filename_lower.endswith(".pdf"):
+            # Extracción con pdfplumber
             with pdfplumber.open(io.BytesIO(contents)) as pdf:
                 for page in pdf.pages:
                     t = page.extract_text()
                     if t: raw_text += t + "\n"
             
+            # Convertir PDF a imágenes y aplicar Tesseract obligatoriamente (para PDFs escaneados)
             pil_images = convert_from_bytes(contents)
             for img in pil_images:
+                ocr_text = pytesseract.image_to_string(img, lang="spa")
+                raw_text += "\n" + ocr_text
+
                 buffered = io.BytesIO()
                 img.save(buffered, format="PNG")
                 img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
@@ -187,7 +190,7 @@ async def process_document(file: UploadFile = File(...)):
             image.save(buffered, format="PNG")
             images_base64.append(f"data:image/png;base64,{base64.b64encode(buffered.getvalue()).decode('utf-8')}")
     except Exception as e:
-        print("Error:", e)
+        print("Error en /process:", e)
 
     parsed = parse_extracted_text(raw_text)
     parsed["images"] = images_base64
@@ -224,7 +227,11 @@ async def sync_user_mail_by_doc(payload: SyncByDocRequest):
                                         for p in pdf.pages:
                                             t = p.extract_text()
                                             if t: raw_text += t + "\n"
+                                    
                                     for img in convert_from_bytes(file_bytes):
+                                        ocr_text = pytesseract.image_to_string(img, lang="spa")
+                                        raw_text += "\n" + ocr_text
+
                                         buffered = io.BytesIO()
                                         img.save(buffered, format="PNG")
                                         images_base64.append(f"data:image/png;base64,{base64.b64encode(buffered.getvalue()).decode('utf-8')}")
@@ -245,6 +252,7 @@ async def sync_user_mail_by_doc(payload: SyncByDocRequest):
         mail.logout()
         return {"success": True, "count": len(found_transactions), "transactions": found_transactions}
     except Exception as e:
+        print("Error en sync-mail:", e)
         return {"success": False, "error": str(e), "transactions": []}
 
 if __name__ == "__main__":
