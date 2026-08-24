@@ -8,11 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard,
   ReceiptText,
-  PieChart,
-  Repeat,
-  CreditCard,
   FileText,
-  BarChart3,
   Settings,
   LogOut,
   Wallet,
@@ -26,22 +22,18 @@ interface NavItem {
   icon: React.ElementType;
 }
 
-// Módulos principales activos y funcionales
+// Solo los módulos solicitados
 const activeNavItems: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Movimientos", href: "/movimientos", icon: ReceiptText },
-  { name: "Presupuestos", href: "/presupuestos", icon: PieChart },
-  { name: "Recurrentes", href: "/recurrentes", icon: Repeat },
-  { name: "Cuotas", href: "/cuotas", icon: CreditCard },
   { name: "Recibos PDF", href: "/recibos", icon: FileText },
-  { name: "Analítica & Metas", href: "/analitica", icon: BarChart3 },
 ];
 
 const mobileBottomNav = [
   { name: "Inicio", href: "/", icon: LayoutDashboard },
   { name: "Movimientos", href: "/movimientos", icon: ReceiptText },
-  { name: "Presupuestos", href: "/presupuestos", icon: PieChart },
   { name: "Recibos", href: "/recibos", icon: FileText },
+  { name: "Ajustes", href: "#", icon: Settings },
 ];
 
 export default function DashboardLayout({
@@ -51,7 +43,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const { profile, logout } = useAuth();
-  const [showConfigAlert, setShowConfigAlert] = useState(false);
+  const [showAlert, setShowAlert] = useState(false);
 
   const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
 
@@ -82,18 +74,18 @@ export default function DashboardLayout({
 
   const handleConfigClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    setShowConfigAlert(true);
-    setTimeout(() => setShowConfigAlert(false), 3500);
+    setShowAlert(true);
+    setTimeout(() => setShowAlert(false), 4000);
   };
 
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row relative">
         
-        {/* Alerta flotante para Configuración */}
-        {showConfigAlert && (
+        {/* Alerta flotante de Configuración */}
+        {showAlert && (
           <div className="fixed top-20 right-6 z-50 rounded-xl bg-blue-600 text-white px-4 py-3 shadow-2xl border border-blue-400 text-xs flex items-center gap-2 animate-bounce">
-            <span>⚙️ El módulo de Configuración estará disponible próximamente en el demo.</span>
+            <span>⚙️ El módulo de Configuración estará disponible próximamente (se está ajustando).</span>
           </div>
         )}
 
@@ -174,8 +166,8 @@ export default function DashboardLayout({
               );
             })}
 
-            {/* Configuración con aviso de próximamente */}
-            <div className="pt-2">
+            {/* Configuración con aviso */}
+            <div className="pt-1">
               <button
                 onClick={handleConfigClick}
                 className="w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-400 hover:bg-slate-900 hover:text-slate-100 transition-all text-left"
@@ -223,6 +215,18 @@ export default function DashboardLayout({
           {mobileBottomNav.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
+            if (item.name === "Ajustes") {
+              return (
+                <button
+                  key={item.name}
+                  onClick={handleConfigClick}
+                  className="flex flex-col items-center justify-center gap-1 flex-1 py-1 text-slate-400 hover:text-slate-200 transition-colors"
+                >
+                  <Icon className="h-5 w-5" />
+                  <span className="text-[10px]">Ajustes</span>
+                </button>
+              );
+            }
             return (
               <Link
                 key={item.href}
