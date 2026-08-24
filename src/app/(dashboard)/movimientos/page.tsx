@@ -1,5 +1,6 @@
 "use client";
 
+import SyncMailModal from "@/components/SyncMailModal";
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase/client";
@@ -10,8 +11,6 @@ import {
   onSnapshot,
   addDoc,
   doc,
-  getDoc,
-  setDoc,
   updateDoc,
   deleteDoc,
   serverTimestamp,
@@ -21,8 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   ReceiptText,
-  TrendingDown,
-  TrendingUp,
   PlusCircle,
   Search,
   ArrowUpDown,
@@ -47,9 +44,6 @@ import {
   ChevronRight,
   Mail,
   CheckCircle2,
-  Calendar,
-  KeyRound,
-  ExternalLink,
   Download,
   FileSpreadsheet,
 } from "lucide-react";
@@ -101,14 +95,6 @@ const CATEGORIES_EXPENSE = [
   { id: "Salud y Farmacia", icon: HeartPulse },
   { id: "Ocio y Salidas", icon: Coffee },
   { id: "Otros Gastos", icon: Tag },
-];
-
-const CATEGORIES_INCOME = [
-  { id: "Salario", icon: Building },
-  { id: "Ingreso Extra", icon: Zap },
-  { id: "Cobro por Servicios / Ventas", icon: Tag },
-  { id: "Cobro de Alquiler", icon: Home },
-  { id: "Otros Ingresos", icon: Tag },
 ];
 
 const formatPYG = (value: number | string) => {
@@ -171,21 +157,14 @@ export default function MovimientosPage() {
   const [zoomImageModal, setZoomImageModal] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sincronización de Correo
-  const [isSyncingMail, setIsSyncingMail] = useState(false);
-  const [syncPeriod, setSyncPeriod] = useState<"30" | "60" | "custom">("60");
-  const [customStartDate, setCustomStartDate] = useState(
-    new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
-  );
-  const [customEndDate, setCustomEndDate] = useState(new Date().toISOString().split("T")[0]);
-  const [showMailAuthModal, setShowMailAuthModal] = useState(false);
-  const [appPasswordInput, setAppPasswordInput] = useState("");
-  const [documentNumberInput, setDocumentNumberInput] = useState("");
+  // Estado para controlar la apertura del Modal de Sincronización de Correo limpio
+  const [showSyncMailModal, setShowSyncMailModal] = useState(false);
 
   // Modal Confirmación de Eliminación
   const [itemToDelete, setItemToDelete] = useState<TransactionItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Carga de datos en tiempo real desde Firebase Firestore
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -238,7 +217,7 @@ export default function MovimientosPage() {
     });
   }, [transactions, activeTab, searchTerm, sortOrder]);
 
-  // IMPORTANTE: Para el Dashboard y el Balance, solo sumamos los ingresos y los gastos donde "isMyExpense !== false" (Gastos Propios)
+  // Balance y Gastos Propios
   const myTransactions = useMemo(
     () => transactions.filter((t) => t.isMyExpense !== false),
     [transactions]
@@ -254,7 +233,7 @@ export default function MovimientosPage() {
   );
   const currentBalance = totalIncomes - totalExpenses;
 
-  // Cálculo de IVA para Marangato (solo de facturas propias)
+  // Cálculo de IVA para Marangato
   const marangatoTaxSummary = useMemo(() => {
     const facturasPropias = myTransactions.filter(
       (t) => !(t.docType || "").toLowerCase().includes("recibo")
@@ -333,7 +312,7 @@ export default function MovimientosPage() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/ocr", { method: "POST", body: formData });
+      const res = await fetch("https://virucheck-api.onrender.com/process", { method: "POST", body: formData });
       if (!res.ok) throw new Error("Error procesando");
 
       const docData: ExtractedDocInfo = await res.json();
@@ -464,97 +443,6 @@ export default function MovimientosPage() {
     }
   };
 
-  const executeMailSync = async (emailAddr: string, appPass: string, docNum: string) => {
-    setIsSyncingMail(true);
-    try {
-      const payload: any = { email: emailAddr, password: appPass, documentNumber: docNum || "5265619" };
-      if (syncPeriod === "custom") {
-        payload.startDate = customStartDate;
-        payload.endDate = customEndDate;
-      } else {
-        payload.days = parseInt(syncPeriod, 10);
-      }
-
-      const res = await fetch("/api/sync-mail", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (data.success && data.transactions && data.transactions.length > 0) {
-        let addedCount = 0;
-        for (const item of data.transactions) {
-          if (!user?.uid || !item.amount) continue;
-          const isDuplicate = transactions.some(
-            (t) => Number(t.amount) === Number(item.amount) && t.date === item.date && t.documentNumber === item.documentNumber
-          );
-
-          if (!isDuplicate) {
-            await addDoc(collection(db, "transactions"), {
-              userId: user.uid,
-              amount: Number(item.amount),
-              currency: "PYG",
-              type: "expense",
-              docType: item.docType || "Factura",
-              categoryId: item.category || "Otros Gastos",
-              description: item.productDetail || `${item.docType} de ${item.businessName}`,
-              counterpartyName: item.businessName || "Comercio",
-              paymentMethod: "Transferencia",
-              date: item.date || new Date().toISOString().split("T")[0],
-              documentNumber: item.documentNumber || "001-001-0000001",
-              cdc: item.cdc || "",
-              isMyExpense: true,
-              gravada10: Number(item.gravada10 || item.amount),
-              gravada5: Number(item.gravada5 || 0),
-              exenta: Number(item.exenta || 0),
-              receiptImages: item.images || [],
-              createdAt: serverTimestamp(),
-            });
-            addedCount++;
-          }
-        }
-        alert(`✨ Sincronización completa: ${addedCount} documentos nuevos añadidos desde tu correo.`);
-      } else {
-        alert(data.error ? `Aviso: ${data.error}` : "No se encontraron nuevos comprobantes.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Error al conectar con el servidor de correo.");
-    } finally {
-      setIsSyncingMail(false);
-    }
-  };
-
-  const handleStartMailSync = async () => {
-    if (!user?.uid || !user?.email) return;
-    try {
-      const userDocRef = doc(db, "users", user.uid);
-      const userSnap = await getDoc(userDocRef);
-      if (userSnap.exists() && userSnap.data().mailAppPassword) {
-        await executeMailSync(user.email, userSnap.data().mailAppPassword, userSnap.data().documentNumber || "");
-      } else {
-        setShowMailAuthModal(true);
-      }
-    } catch (e) {
-      setShowMailAuthModal(true);
-    }
-  };
-
-  const handleSaveAppPasswordAndSync = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user?.uid || !user?.email || !appPasswordInput.trim()) return;
-    try {
-      const cleanPass = appPasswordInput.replace(/\s+/g, "").trim();
-      const cleanDoc = documentNumberInput.trim() || "5265619";
-      await setDoc(doc(db, "users", user.uid), { mailAppPassword: cleanPass, documentNumber: cleanDoc }, { merge: true });
-      setShowMailAuthModal(false);
-      await executeMailSync(user.email, cleanPass, cleanDoc);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 pb-28 md:pb-12 px-4 sm:px-6 animate-in fade-in duration-300">
       <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.docx" onChange={handleFileScan} className="hidden" />
@@ -604,7 +492,7 @@ export default function MovimientosPage() {
         </div>
       </div>
 
-      {/* BANNER DE RESUMEN IVA MARANGATO (Basado en Gastos Propios) */}
+      {/* BANNER DE RESUMEN IVA MARANGATO */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="rounded-3xl border border-blue-500/30 bg-blue-950/40 p-5 backdrop-blur-md shadow-lg space-y-1">
           <span className="text-[11px] font-extrabold uppercase tracking-widest text-blue-300">IVA 10% Crédito</span>
@@ -626,7 +514,7 @@ export default function MovimientosPage() {
         </div>
       </div>
 
-      {/* PANEL DE SINCRONIZACIÓN DE CORREO */}
+      {/* PANEL DE SINCRONIZACIÓN DE CORREO QUE ABRE EL MODAL LIMPIO */}
       <div className="relative overflow-hidden rounded-3xl border border-blue-500/30 bg-gradient-to-br from-blue-950/60 via-slate-900/90 to-indigo-950/50 p-6 backdrop-blur-xl shadow-2xl space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
           <div className="flex items-start gap-4">
@@ -646,67 +534,14 @@ export default function MovimientosPage() {
           <Button
             type="button"
             size="sm"
-            disabled={isSyncingMail}
-            onClick={handleStartMailSync}
+            onClick={() => setShowSyncMailModal(true)}
             className="h-11 px-6 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs gap-2 shadow-lg shadow-blue-600/30 transition-all shrink-0"
           >
-            {isSyncingMail ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-            <span>{isSyncingMail ? "Sincronizando..." : "Sincronizar Facturas del Correo"}</span>
+            <CheckCircle2 className="h-4 w-4" />
+            <span>Sincronizar Facturas del Correo</span>
           </Button>
         </div>
       </div>
-
-      {/* MODAL CONFIGURAR CLAVE GMAIL */}
-      {showMailAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
-          <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden p-7 space-y-5">
-            <div className="flex items-center gap-3.5">
-              <div className="p-3.5 bg-blue-600/20 text-blue-400 rounded-2xl border border-blue-500/30">
-                <KeyRound className="h-6 w-6" />
-              </div>
-              <div className="space-y-0.5">
-                <h3 className="text-lg font-bold text-white">Conectar Gmail</h3>
-                <p className="text-xs text-slate-400">{user?.email}</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveAppPasswordAndSync} className="space-y-4 text-xs">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-300 font-bold">Contraseña de Aplicación de Google (16 dígitos)</Label>
-                <Input
-                  type="password"
-                  required
-                  placeholder="ej: jiyx octy rcxn sgzt"
-                  value={appPasswordInput}
-                  onChange={(e) => setAppPasswordInput(e.target.value)}
-                  className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 font-mono text-sm tracking-widest px-4"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-300 font-bold">N° de Cédula o RUC (para filtrar facturas)</Label>
-                <Input
-                  type="text"
-                  required
-                  placeholder="ej: 5265619"
-                  value={documentNumberInput}
-                  onChange={(e) => setDocumentNumberInput(e.target.value)}
-                  className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4 font-mono"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-                <Button type="button" variant="outline" onClick={() => setShowMailAuthModal(false)} className="rounded-xl border-slate-700 text-xs text-slate-300 h-10 px-4">
-                  Cancelar
-                </Button>
-                <Button type="submit" className="rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white h-10 px-6">
-                  Guardar y Sincronizar
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* PESTAÑAS PRINCIPALES: FACTURAS PROPIAS, TERCEROS Y RECIBOS */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto">
@@ -853,7 +688,7 @@ export default function MovimientosPage() {
         )}
       </div>
 
-      {/* MODAL FORMULARIO */}
+      {/* MODAL FORMULARIO DE REGISTRO / EDICIÓN */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
           <div className="w-full max-w-xl rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
@@ -870,7 +705,6 @@ export default function MovimientosPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
-              {/* VISOR DE PÁGINAS MÚLTIPLES PNG CON ZOOM Y DESCARGA */}
               {scannedImages.length > 0 && (
                 <div className="relative rounded-2xl border border-slate-800 bg-slate-950 p-3 flex flex-col items-center justify-center">
                   <div className="w-full flex items-center justify-between px-2 py-1 text-[11px] text-slate-400 border-b border-slate-800 mb-2.5">
@@ -949,7 +783,6 @@ export default function MovimientosPage() {
                 />
               </div>
 
-              {/* CAMPOS DE IMPUESTOS (GRAVADA 10%, 5% Y EXENTA) */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1">
                   <Label className="text-[10px] text-slate-400 font-bold">Gravada 10%</Label>
@@ -1056,13 +889,23 @@ export default function MovimientosPage() {
               <Button variant="outline" size="sm" onClick={() => setItemToDelete(null)} className="rounded-xl border-slate-700 text-xs text-slate-300 h-10 px-4">
                 Cancelar
               </Button>
-              <Button size="sm" disabled={isDeleting} onClick={confirmDelete} className="rounded-xl bg-rose-600 hover:bg-rose-500 font-bold text-xs text-white h-10 px-5">
+              <Button size="sm" disabled={isDeleting} onClick={confirmDelete} className="rounded-xl bg-rose-600 hover:bg-rose-500 font-bold text-xs text-white px-5">
                 {isDeleting ? "Eliminando..." : "Sí, Eliminar"}
               </Button>
             </div>
           </div>
         </div>
       )}
+
+      {/* COMPONENTE MODAL DE SINCRONIZACIÓN DE CORREO (LIMPIO Y SIN PEDIR RUC MANUAL) */}
+      <SyncMailModal
+        isOpen={showSyncMailModal}
+        onClose={() => setShowSyncMailModal(false)}
+        userEmail={user?.email || ""}
+        onSyncComplete={(newTransactions) => {
+          console.log("Transacciones añadidas:", newTransactions);
+        }}
+      />
     </div>
   );
 }
