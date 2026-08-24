@@ -18,9 +18,8 @@ import email
 from datetime import datetime, timedelta
 import base64
 
-app = FastAPI(title="ViruCheck OCR API", version="2.0")
+app = FastAPI(title="ViruCheck OCR API", version="2.2")
 
-# Configuración de CORS para permitir peticiones desde Vercel y desarrollo local
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,30 +27,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==========================================
-# MODELOS DE DATOS (PYDANTIC)
-# ==========================================
 class SyncMailRequest(BaseModel):
     email: str
-    password: str  # Contraseña de aplicación de Gmail (16 dígitos)
+    password: str
     startDate: Optional[str] = None
-    days: int = 15  # Rango optimizado por defecto para evitar timeouts en plan gratuito
+    days: int = 7
 
-# Mapeo de meses para consultas IMAP de correo
 MONTHS_EN = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 
 def to_imap_date(dt: datetime) -> str:
-    """Convierte una fecha al formato requerido por el comando SEARCH de IMAP (ej: 01-JAN-2026)."""
     return f"{dt.day:02d}-{MONTHS_EN[dt.month - 1]}-{dt.year}"
 
-# ==========================================
-# MOTOR DE EXTRACCIÓN Y PARSEO DE TEXTO (OCR)
-# ==========================================
 def parse_extracted_text(raw_text: str):
-    """
-    Analiza el texto plano extraído de una factura/comprobante mediante expresiones regulares
-    para detectar montos, timbrados, tipo de documento, emisor y fechas.
-    """
     lower = raw_text.lower()
     lines = [l.strip() for l in raw_text.split("\n") if l.strip()]
 
@@ -83,8 +70,8 @@ def parse_extracted_text(raw_text: str):
     # 4. Emisor / Comercio detectado
     business_name = "Comercio Emisor"
     known_brands = [
-        ("cafsa", "Supermercado Arete"),
         ("arete", "Supermercado Arete"),
+        ("cafsa", "Supermercado Arete"),
         ("superseis", "Superseis"),
         ("stock", "Supermercados Stock"),
         ("biggie", "Biggie Express"),
@@ -107,22 +94,21 @@ def parse_extracted_text(raw_text: str):
     # 5. Detección de Monto Total
     amounts = []
     for line in lines:
-        if any(k in line.lower() for k in ["total de la operación", "total a pagar", "total general", "total gs", "total:", "importe total"]):
+        if any(k in line.lower() for k in ["total", "a pagar", "importe", "gs"]):
             nums = re.findall(r"\b\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\b", line)
             for n in nums:
                 val = float(n.replace(".", "").replace(",", "."))
-                if 500 <= val <= 500000000:
+                if 1000 <= val <= 500000000:
                     amounts.append(val)
 
     if not amounts:
-        for n in re.findall(r"\b\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\b", raw_text):
+        for n in re.findall(r"\b\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{2})?\b", raw_text):
             val = float(n.replace(".", "").replace(",", "."))
             if 1000 <= val <= 500000000:
                 amounts.append(val)
 
     detected_amount = max(amounts) if amounts else 0.0
 
-    # Desglose de impuestos básicos
     is_exenta = any(k in lower for k in ["exentas", "exenta", "no gravado", "iva 0%"])
     is_gravada_5 = "5%" in lower or "5 por ciento" in lower
 
@@ -137,7 +123,6 @@ def parse_extracted_text(raw_text: str):
     else:
         gravada_10 = detected_amount if doc_type == "Factura" else 0.0
 
-    # 6. Detalle del Producto / Ítem
     product_detail = f"{doc_type} - {business_name}"
     for line in lines:
         upper_line = line.upper()
@@ -148,7 +133,6 @@ def parse_extracted_text(raw_text: str):
                 product_detail = line
                 break
 
-    # 7. Fecha de Emisión
     detected_date = datetime.today().strftime("%Y-%m-%d")
     date_match = re.search(r"\b(\d{1,2})[/\.-](\d{1,2})[/\.-](\d{2,4})\b", raw_text)
     if date_match:
@@ -174,13 +158,8 @@ def parse_extracted_text(raw_text: str):
         "date": detected_date,
     }
 
-# ==========================================
-# ENDPOINTS DE LA API
-# ==========================================
-
 @app.post("/process")
 async def process_document(file: UploadFile = File(...)):
-    """Procesa un único archivo (PDF o Imagen) subido desde el frontend."""
     contents = await file.read()
     raw_text = ""
     filename_lower = (file.filename or "").lower()
@@ -188,16 +167,14 @@ async def process_document(file: UploadFile = File(...)):
     
     try:
         if filename_lower.endswith(".pdf"):
-            # Intento de extracción digital directa con pdfplumber
             with pdfplumber.open(io.BytesIO(contents)) as pdf:
                 for page in pdf.pages:
                     t = page.extract_text()
                     if t: raw_text += t + "\n"
             
-            # Conversión de PDF a imagen para asegurar lectura por Tesseract (PDFs escaneados)
             pil_images = convert_from_bytes(contents)
             for img in pil_images:
-                img.thumbnail((1600, 1600))  # Optimización para prevenir saturación de memoria
+                img.thumbnail((1600, 1600))
                 ocr_text = pytesseract.image_to_string(img, lang="spa")
                 raw_text += "\n" + ocr_text
 
@@ -207,7 +184,7 @@ async def process_document(file: UploadFile = File(...)):
                 images_base64.append(f"data:image/png;base64,{img_str}")
         else:
             image = Image.open(io.BytesIO(contents))
-            image.thumbnail((1600, 1600))  # Optimización para fotos pesadas de celulares
+            image.thumbnail((1600, 1600))
             raw_text = pytesseract.image_to_string(image, lang="spa")
             
             buffered = io.BytesIO()
@@ -220,10 +197,8 @@ async def process_document(file: UploadFile = File(...)):
     parsed["images"] = images_base64
     return parsed
 
-
 @app.post("/sync-mail")
 async def sync_user_mail(payload: SyncMailRequest):
-    """Se conecta a Gmail por IMAP usando contraseña de aplicación y extrae comprobantes recientes."""
     found_transactions = []
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
@@ -234,8 +209,7 @@ async def sync_user_mail(payload: SyncMailRequest):
         status, messages = mail.search(None, f'(SINCE "{to_imap_date(start_dt)}")')
         email_ids = messages[0].split()
 
-        # Limitar a los últimos 15 correos para garantizar velocidad y evitar timeouts
-        for e_id in reversed(email_ids[-15:]):
+        for e_id in reversed(email_ids[-10:]):
             status, msg_data = mail.fetch(e_id, "(RFC822)")
             for response_part in msg_data:
                 if isinstance(response_part, tuple):
