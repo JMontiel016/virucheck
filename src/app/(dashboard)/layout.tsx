@@ -8,43 +8,46 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard,
   ReceiptText,
-  PieChart,
-  Repeat,
-  CreditCard,
   ScanText,
   FileText,
-  BarChart3,
   Settings,
   LogOut,
   Wallet,
   Clock,
   Calendar,
+  Sparkles,
+  Smartphone,
+  Globe,
 } from "lucide-react";
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ElementType;
+  badge?: string;
 }
 
-const navItems: NavItem[] = [
+// Módulos activos actualmente en el demo
+const activeNavItems: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Movimientos", href: "/movimientos", icon: ReceiptText },
-  { name: "Presupuestos", href: "/presupuestos", icon: PieChart },
-  { name: "Recurrentes", href: "/recurrentes", icon: Repeat },
-  { name: "Cuotas", href: "/cuotas", icon: CreditCard },
-  { name: "Recibos PDF", href: "/recibos", icon: FileText },
   { name: "Bandeja OCR", href: "/ocr", icon: ScanText },
-  { name: "Analítica & Metas", href: "/analitica", icon: BarChart3 },
+  { name: "Recibos PDF", href: "/recibos", icon: FileText },
   { name: "Configuración", href: "/configuracion", icon: Settings },
+];
+
+// Módulos proyectados para el futuro (Web & Móvil)
+const futureNavItems: NavItem[] = [
+  { name: "App Nativa iOS/Android", href: "#", icon: Smartphone, badge: "Próximamente" },
+  { name: "Sincronización Bancaria IA", href: "#", icon: Sparkles, badge: "Futuro" },
 ];
 
 const mobileBottomNav = [
   { name: "Inicio", href: "/", icon: LayoutDashboard },
   { name: "Movimientos", href: "/movimientos", icon: ReceiptText },
   { name: "Escanear", href: "/ocr", icon: ScanText },
-  { name: "Presupuestos", href: "/presupuestos", icon: PieChart },
   { name: "Recibos", href: "/recibos", icon: FileText },
+  { name: "Ajustes", href: "/configuracion", icon: Settings },
 ];
 
 export default function DashboardLayout({
@@ -55,7 +58,6 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const { profile, logout } = useAuth();
 
-  // Reloj y fecha en tiempo real
   const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -67,7 +69,6 @@ export default function DashboardLayout({
     return () => clearInterval(timer);
   }, []);
 
-  // Formato: 23 de agosto, 2026
   const formattedDate = currentDateTime
     ? currentDateTime.toLocaleDateString("es-ES", {
         day: "numeric",
@@ -76,7 +77,6 @@ export default function DashboardLayout({
       })
     : "-- ---, ----";
 
-  // Formato: 02:20:37 AM/PM o 24hs
   const formattedTime = currentDateTime
     ? currentDateTime.toLocaleTimeString("es-ES", {
         hour: "2-digit",
@@ -89,9 +89,7 @@ export default function DashboardLayout({
     <ProtectedRoute>
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
         
-        {/* ========================================================= */}
-        {/* 1. HEADER MÓVIL CON RELOJ EN TIEMPO REAL                 */}
-        {/* ========================================================= */}
+        {/* HEADER MÓVIL */}
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-4 backdrop-blur-md md:hidden">
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600/20 text-blue-500 ring-1 ring-blue-500/30">
@@ -100,7 +98,6 @@ export default function DashboardLayout({
             <span className="text-sm font-bold tracking-tight text-white">ViruCheck</span>
           </div>
 
-          {/* Reloj y Fecha Móvil */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 rounded-xl bg-slate-900/80 px-2.5 py-1 border border-slate-800 font-mono text-[11px] text-cyan-400 font-bold">
               <Clock className="h-3 w-3 text-cyan-400 animate-pulse" />
@@ -117,11 +114,8 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        {/* ========================================================= */}
-        {/* 2. SIDEBAR ESCRITORIO CON FECHA Y HORA EN TIEMPO REAL    */}
-        {/* ========================================================= */}
+        {/* SIDEBAR ESCRITORIO */}
         <aside className="hidden md:flex fixed inset-y-0 left-0 z-50 w-64 flex-col border-r border-slate-800 bg-slate-950/95 backdrop-blur-md">
-          {/* Logo & Marca */}
           <div className="flex h-20 flex-col justify-center border-b border-slate-800/80 px-6">
             <div className="flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600/20 text-blue-500 ring-1 ring-blue-500/30">
@@ -129,12 +123,12 @@ export default function DashboardLayout({
               </div>
               <div>
                 <span className="text-lg font-bold tracking-tight text-white">ViruCheck</span>
-                <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase">Control Inteligente</p>
+                <p className="text-[10px] font-medium tracking-wide text-slate-400 uppercase">Demo Financiero</p>
               </div>
             </div>
           </div>
 
-          {/* Tarjeta Reloj & Fecha en Tiempo Real (Sidebar) */}
+          {/* Reloj y Fecha */}
           <div className="px-3 pt-3">
             <div className="rounded-2xl border border-slate-800/90 bg-gradient-to-br from-slate-900/80 to-slate-950 p-3 shadow-inner">
               <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
@@ -150,9 +144,10 @@ export default function DashboardLayout({
             </div>
           </div>
 
-          {/* Navegación */}
+          {/* Navegación Activa */}
           <nav className="flex-1 space-y-1 px-3 py-3 overflow-y-auto">
-            {navItems.map((item) => {
+            <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Módulos Activos</p>
+            {activeNavItems.map((item) => {
               const isActive = pathname === item.href;
               const Icon = item.icon;
               return (
@@ -170,9 +165,33 @@ export default function DashboardLayout({
                 </Link>
               );
             })}
+
+            {/* Sección de Futuras Actualizaciones */}
+            <div className="pt-4">
+              <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1">
+                <Sparkles className="h-3 w-3" /> Roadmap Futuro
+              </p>
+              {futureNavItems.map((item, idx) => {
+                const Icon = item.icon;
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between rounded-xl px-3 py-2 text-xs text-slate-500 bg-slate-900/30 border border-slate-900 cursor-not-allowed my-1"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="h-4 w-4 text-slate-600" />
+                      <span className="line-through">{item.name}</span>
+                    </div>
+                    <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded-md font-mono">
+                      {item.badge}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </nav>
 
-          {/* Perfil Usuario & Salir */}
+          {/* Perfil & Salir */}
           <div className="border-t border-slate-800/80 p-3">
             <div className="flex items-center justify-between rounded-xl bg-slate-900/60 p-2.5 border border-slate-800/60">
               <div className="flex flex-col truncate pr-2">
@@ -194,18 +213,14 @@ export default function DashboardLayout({
           </div>
         </aside>
 
-        {/* ========================================================= */}
-        {/* 3. CONTENEDOR PRINCIPAL RESPONSIVO                       */}
-        {/* ========================================================= */}
+        {/* CONTENEDOR PRINCIPAL */}
         <div className="flex flex-1 flex-col md:pl-64 pb-20 md:pb-8">
           <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto">
             {children}
           </main>
         </div>
 
-        {/* ========================================================= */}
-        {/* 4. BARRA INFERIOR MÓVIL                                   */}
-        {/* ========================================================= */}
+        {/* BARRA INFERIOR MÓVIL */}
         <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-slate-800 bg-slate-950/95 px-2 backdrop-blur-lg md:hidden">
           {mobileBottomNav.map((item) => {
             const isActive = pathname === item.href;
