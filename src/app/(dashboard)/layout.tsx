@@ -8,46 +8,40 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard,
   ReceiptText,
-  ScanText,
+  PieChart,
+  Repeat,
+  CreditCard,
   FileText,
+  BarChart3,
   Settings,
   LogOut,
   Wallet,
   Clock,
   Calendar,
-  Sparkles,
-  Smartphone,
-  Globe,
 } from "lucide-react";
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ElementType;
-  badge?: string;
 }
 
-// Módulos activos actualmente en el demo
+// Módulos principales activos y funcionales
 const activeNavItems: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Movimientos", href: "/movimientos", icon: ReceiptText },
-  { name: "Bandeja OCR", href: "/ocr", icon: ScanText },
+  { name: "Presupuestos", href: "/presupuestos", icon: PieChart },
+  { name: "Recurrentes", href: "/recurrentes", icon: Repeat },
+  { name: "Cuotas", href: "/cuotas", icon: CreditCard },
   { name: "Recibos PDF", href: "/recibos", icon: FileText },
-  { name: "Configuración", href: "/configuracion", icon: Settings },
-];
-
-// Módulos proyectados para el futuro (Web & Móvil)
-const futureNavItems: NavItem[] = [
-  { name: "App Nativa iOS/Android", href: "#", icon: Smartphone, badge: "Próximamente" },
-  { name: "Sincronización Bancaria IA", href: "#", icon: Sparkles, badge: "Futuro" },
+  { name: "Analítica & Metas", href: "/analitica", icon: BarChart3 },
 ];
 
 const mobileBottomNav = [
   { name: "Inicio", href: "/", icon: LayoutDashboard },
   { name: "Movimientos", href: "/movimientos", icon: ReceiptText },
-  { name: "Escanear", href: "/ocr", icon: ScanText },
+  { name: "Presupuestos", href: "/presupuestos", icon: PieChart },
   { name: "Recibos", href: "/recibos", icon: FileText },
-  { name: "Ajustes", href: "/configuracion", icon: Settings },
 ];
 
 export default function DashboardLayout({
@@ -57,6 +51,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const { profile, logout } = useAuth();
+  const [showConfigAlert, setShowConfigAlert] = useState(false);
 
   const [currentDateTime, setCurrentDateTime] = useState<Date | null>(null);
 
@@ -85,10 +80,23 @@ export default function DashboardLayout({
       })
     : "--:--:--";
 
+  const handleConfigClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setShowConfigAlert(true);
+    setTimeout(() => setShowConfigAlert(false), 3500);
+  };
+
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row relative">
         
+        {/* Alerta flotante para Configuración */}
+        {showConfigAlert && (
+          <div className="fixed top-20 right-6 z-50 rounded-xl bg-blue-600 text-white px-4 py-3 shadow-2xl border border-blue-400 text-xs flex items-center gap-2 animate-bounce">
+            <span>⚙️ El módulo de Configuración estará disponible próximamente en el demo.</span>
+          </div>
+        )}
+
         {/* HEADER MÓVIL */}
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-4 backdrop-blur-md md:hidden">
           <div className="flex items-center gap-2">
@@ -146,7 +154,7 @@ export default function DashboardLayout({
 
           {/* Navegación Activa */}
           <nav className="flex-1 space-y-1 px-3 py-3 overflow-y-auto">
-            <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Módulos Activos</p>
+            <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">Módulos</p>
             {activeNavItems.map((item) => {
               const isActive = pathname === item.href;
               const Icon = item.icon;
@@ -166,28 +174,18 @@ export default function DashboardLayout({
               );
             })}
 
-            {/* Sección de Futuras Actualizaciones */}
-            <div className="pt-4">
-              <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1">
-                <Sparkles className="h-3 w-3" /> Roadmap Futuro
-              </p>
-              {futureNavItems.map((item, idx) => {
-                const Icon = item.icon;
-                return (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between rounded-xl px-3 py-2 text-xs text-slate-500 bg-slate-900/30 border border-slate-900 cursor-not-allowed my-1"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon className="h-4 w-4 text-slate-600" />
-                      <span className="line-through">{item.name}</span>
-                    </div>
-                    <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded-md font-mono">
-                      {item.badge}
-                    </span>
-                  </div>
-                );
-              })}
+            {/* Configuración con aviso de próximamente */}
+            <div className="pt-2">
+              <button
+                onClick={handleConfigClick}
+                className="w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-400 hover:bg-slate-900 hover:text-slate-100 transition-all text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <Settings className="h-4 w-4 text-slate-400" />
+                  <span>Configuración</span>
+                </div>
+                <span className="text-[9px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-mono">Pronto</span>
+              </button>
             </div>
           </nav>
 
