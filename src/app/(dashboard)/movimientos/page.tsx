@@ -1,3 +1,11 @@
+/**
+ * ============================================================================
+ * MÓDULO PROFESIONAL DE MOVIMIENTOS, CUOTAS Y PRÉSTAMOS - VIRUCHECK
+ * ============================================================================
+ * Incluye gestión de cuotas mes a mes con interés por mora, préstamos simultáneos,
+ * escáner IA, diseño moderno y campos fiscales completos opcionales.
+ */
+
 "use client";
 
 import SyncMailModal from "@/components/SyncMailModal";
@@ -25,7 +33,6 @@ import {
   ArrowUpDown,
   Trash2,
   Edit3,
-  Building,
   Loader2,
   Tag,
   ShoppingBag,
@@ -46,8 +53,18 @@ import {
   CheckCircle2,
   Download,
   FileSpreadsheet,
+  ArrowUpRight,
+  ArrowDownRight,
+  Activity,
+  FileText,
+  CalendarIcon,
+  CreditCard,
+  Percent
 } from "lucide-react";
 
+// ==========================================
+// 1. INTERFACES Y TIPADOS DE DATOS
+// ==========================================
 interface TransactionItem {
   id: string;
   userId: string;
@@ -63,6 +80,18 @@ interface TransactionItem {
   cdc?: string;
   docType?: string;
   isMyExpense?: boolean;
+  isFiscalInvoice?: boolean;
+  
+  // Control de Cuotas y Préstamos
+  isInstallment?: boolean;
+  installmentCurrent?: number;
+  installmentTotal?: number;
+  isPaid?: boolean;
+  interestRate?: number;
+
+  isLoan?: boolean;
+  loanRemainingBalance?: number;
+
   gravada10?: number;
   gravada5?: number;
   exenta?: number;
@@ -94,7 +123,17 @@ const CATEGORIES_EXPENSE = [
   { id: "Vivienda / Alquiler", icon: Home },
   { id: "Salud y Farmacia", icon: HeartPulse },
   { id: "Ocio y Salidas", icon: Coffee },
+  { id: "Cuotas y Créditos", icon: CreditCard },
+  { id: "Préstamos Bancarios", icon: Percent },
   { id: "Otros Gastos", icon: Tag },
+];
+
+const CATEGORIES_INCOME = [
+  "Salario Principal",
+  "Bono / Ingreso Extra",
+  "Adelanto Salarial",
+  "Ventas / Servicios",
+  "Otros Ingresos"
 ];
 
 const formatPYG = (value: number | string) => {
@@ -113,13 +152,16 @@ const parsePYG = (str: string) => {
   return isNaN(val) ? 0 : val;
 };
 
+// ==========================================
+// 2. COMPONENTE PRINCIPAL
+// ==========================================
 export default function MovimientosPage() {
   const { user } = useAuth();
 
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Pestañas principales: Facturas Propias, Facturas de Terceros, Recibos
+  // Pestañas principales
   const [activeTab, setActiveTab] = useState<"propias" | "terceros" | "recibos">("propias");
 
   // Filtros y Búsqueda
@@ -127,44 +169,56 @@ export default function MovimientosPage() {
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
 
   // Paginación
-  const [itemsPerPage] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Modal Crear / Editar
+  // Fechas y Periodo
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
+
+  // Modal Crear / Editar detallado
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formType, setFormType] = useState<"expense" | "income">("expense");
+  const [isFiscalInvoice, setIsFiscalInvoice] = useState<boolean>(true); // [CORREGIDO AQUÍ]
   const [formDocType, setFormDocType] = useState("Factura");
   const [formAmountInput, setFormAmountInput] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formCategory, setFormCategory] = useState("Alimentación / Supermercado");
   const [formCounterparty, setFormCounterparty] = useState("");
-  const [formPaymentMethod, setFormPaymentMethod] = useState("Transferencia");
   const [formDate, setFormDate] = useState(new Date().toISOString().split("T")[0]);
   const [formDocNumber, setFormDocNumber] = useState("");
   const [formCdc, setFormCdc] = useState("");
   const [formIsMyExpense, setFormIsMyExpense] = useState(true);
+  
+  // Campos tributarios opcionales
   const [formGravada10, setFormGravada10] = useState("");
   const [formGravada5, setFormGravada5] = useState("");
   const [formExenta, setFormExenta] = useState("");
+
+  // Cuotas y Préstamos
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [installmentTotal, setInstallmentTotal] = useState("12");
+  const [installmentInterest, setInstallmentInterest] = useState("0");
+  const [isLoan, setIsLoan] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Escáner e Imágenes Múltiples con Zoom
+  // Escáner OCR y Visor PNG
   const [isScanning, setIsScanning] = useState(false);
-  const [scanStatusMessage, setScanStatusMessage] = useState("");
   const [scannedImages, setScannedImages] = useState<string[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [zoomImageModal, setZoomImageModal] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Estado para controlar la apertura del Modal de Sincronización de Correo limpio
   const [showSyncMailModal, setShowSyncMailModal] = useState(false);
-
-  // Modal Confirmación de Eliminación
   const [itemToDelete, setItemToDelete] = useState<TransactionItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Carga de datos en tiempo real desde Firebase Firestore
+  // ==========================================
+  // 3. CARGA DE DATOS EN TIEMPO REAL (FIREBASE)
+  // ==========================================
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -188,15 +242,20 @@ export default function MovimientosPage() {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // Filtrado según la pestaña activa
+  const currentMonthKey = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+
+  // ==========================================
+  // 4. FILTRADO POR PESTAÑAS Y BÚSQUEDA
+  // ==========================================
   const filteredList = useMemo(() => {
     let result = transactions.filter((t) => {
       const isRecibo = (t.docType || "").toLowerCase().includes("recibo");
       const isMyExp = t.isMyExpense !== false;
+      const belongsToCurrentMonth = (t.date || "").startsWith(currentMonthKey);
 
-      if (activeTab === "recibos") return isRecibo;
-      if (activeTab === "terceros") return !isRecibo && !isMyExp;
-      return !isRecibo && isMyExp; // Pestaña predeterminada: Facturas Propias
+      if (activeTab === "recibos") return isRecibo && belongsToCurrentMonth;
+      if (activeTab === "terceros") return !isRecibo && !isMyExp && belongsToCurrentMonth;
+      return !isRecibo && isMyExp && belongsToCurrentMonth;
     });
 
     if (searchTerm.trim()) {
@@ -215,12 +274,21 @@ export default function MovimientosPage() {
       const dateB = b.date || "";
       return sortOrder === "desc" ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
     });
-  }, [transactions, activeTab, searchTerm, sortOrder]);
+  }, [transactions, activeTab, currentMonthKey, searchTerm, sortOrder]);
 
-  // Balance y Gastos Propios
+  const totalPages = Math.ceil(filteredList.length / itemsPerPage) || 1;
+  const paginatedList = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredList.slice(start, start + itemsPerPage);
+  }, [filteredList, currentPage, itemsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [currentMonthKey, itemsPerPage, searchTerm, activeTab]);
+
   const myTransactions = useMemo(
-    () => transactions.filter((t) => t.isMyExpense !== false),
-    [transactions]
+    () => transactions.filter((t) => t.isMyExpense !== false && (t.date || "").startsWith(currentMonthKey)),
+    [transactions, currentMonthKey]
   );
 
   const totalIncomes = useMemo(
@@ -231,49 +299,92 @@ export default function MovimientosPage() {
     () => myTransactions.filter((t) => t.type === "expense").reduce((acc, t) => acc + (Number(t.amount) || 0), 0),
     [myTransactions]
   );
-  const currentBalance = totalIncomes - totalExpenses;
 
-  // Cálculo de IVA para Marangato
-  const marangatoTaxSummary = useMemo(() => {
-    const facturasPropias = myTransactions.filter(
-      (t) => !(t.docType || "").toLowerCase().includes("recibo")
-    );
-    let totalGravada10 = 0;
-    let totalGravada5 = 0;
+  // ==========================================
+  // 5. CAMBIAR ESTADO DE PAGO DE CUOTAS
+  // ==========================================
+  const toggleInstallmentPaid = async (item: TransactionItem) => {
+    try {
+      const newPaidState = !item.isPaid;
+      let finalAmount = item.amount;
 
-    facturasPropias.forEach((t) => {
-      totalGravada10 += Number(t.gravada10 || 0);
-      totalGravada5 += Number(t.gravada5 || 0);
-    });
+      if (newPaidState && item.interestRate && item.interestRate > 0) {
+        const interestExtra = (item.amount * item.interestRate) / 100;
+        finalAmount += interestExtra;
+      }
 
-    return {
-      iva10: totalGravada10 / 11,
-      iva5: totalGravada5 / 21,
-      totalIva: (totalGravada10 / 11) + (totalGravada5 / 21),
-    };
-  }, [myTransactions]);
+      await updateDoc(doc(db, "transactions", item.id), {
+        isPaid: newPaidState,
+        amount: finalAmount,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error("Error al actualizar cuota:", err);
+    }
+  };
 
-  const totalPages = Math.ceil(filteredList.length / itemsPerPage) || 1;
-  const paginatedList = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredList.slice(start, start + itemsPerPage);
-  }, [filteredList, currentPage, itemsPerPage]);
+  // ==========================================
+  // 6. GRÁFICO DE EVOLUCIÓN EXTENDIDO
+  // ==========================================
+  const chartData = useMemo(() => {
+    const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+    const points = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = `${currentMonthKey}-${String(day).padStart(2, "0")}`;
+      
+      const income = transactions.filter((t) => t.type === "income" && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
+      const expense = transactions.filter((t) => t.type === "expense" && !t.isInstallment && !t.isLoan && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
+      const installment = transactions.filter((t) => t.isInstallment && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
+      const loan = transactions.filter((t) => t.isLoan && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
 
+      points.push({ label: `${day}`, income, expense, installment, loan });
+    }
+    return points;
+  }, [selectedYear, selectedMonth, currentMonthKey, transactions]);
+
+  const maxChartVal = Math.max(...chartData.map((d) => Math.max(d.income, d.expense, d.installment, d.loan)), 100000);
+  const svgWidth = 700;
+  const svgHeight = 160;
+  const paddingX = 25;
+  const paddingY = 25;
+
+  const pointsCoords = useMemo(() => {
+    const total = chartData.length;
+    if (total === 0) return { inc: [], exp: [], inst: [], ln: [] };
+    
+    const getPts = (key: "income" | "expense" | "installment" | "loan") =>
+      chartData.map((item, i) => {
+        const x = paddingX + (i / (total - 1 || 1)) * (svgWidth - paddingX * 2);
+        const ratio = item[key] / maxChartVal;
+        const y = svgHeight - paddingY - ratio * (svgHeight - paddingY * 2);
+        return { x, y, ...item };
+      });
+
+    return { inc: getPts("income"), exp: getPts("expense"), inst: getPts("installment"), ln: getPts("loan") };
+  }, [chartData, maxChartVal, svgWidth, svgHeight]);
+
+  // ==========================================
+  // 7. MANEJADORES DE ACCIÓN Y ESCÁNER OCR
+  // ==========================================
   const handleOpenCreate = (type: "expense" | "income" = "expense") => {
     setEditingId(null);
     setScannedImages([]);
     setActivePageIndex(0);
     setFormType(type);
+    setIsFiscalInvoice(true);
     setFormDocType("Factura");
     setFormAmountInput("");
     setFormDescription("");
-    setFormCategory(type === "expense" ? "Alimentación / Supermercado" : "Ingreso Extra");
+    setFormCategory(type === "expense" ? "Alimentación / Supermercado" : "Bono / Ingreso Extra");
     setFormCounterparty("");
-    setFormPaymentMethod("Transferencia");
     setFormDate(new Date().toISOString().split("T")[0]);
     setFormDocNumber("");
     setFormCdc("");
     setFormIsMyExpense(true);
+    setIsInstallment(false);
+    setInstallmentTotal("12");
+    setInstallmentInterest("0");
+    setIsLoan(false);
     setFormGravada10("");
     setFormGravada5("");
     setFormExenta("");
@@ -285,16 +396,20 @@ export default function MovimientosPage() {
     setScannedImages(item.receiptImages || []);
     setActivePageIndex(0);
     setFormType(item.type);
+    setIsFiscalInvoice(item.isFiscalInvoice ?? true);
     setFormDocType(item.docType || "Factura");
     setFormAmountInput(formatPYG(item.amount));
     setFormDescription(item.description || "");
     setFormCategory(item.categoryId || "Otros Gastos");
     setFormCounterparty(item.counterpartyName || "");
-    setFormPaymentMethod(item.paymentMethod || "Transferencia");
     setFormDate(item.date || new Date().toISOString().split("T")[0]);
     setFormDocNumber(item.documentNumber || "");
     setFormCdc(item.cdc || "");
     setFormIsMyExpense(item.isMyExpense !== false);
+    setIsInstallment(item.isInstallment ?? false);
+    setInstallmentTotal(String(item.installmentTotal || 12));
+    setInstallmentInterest(String(item.interestRate || 0));
+    setIsLoan(item.isLoan ?? false);
     setFormGravada10(item.gravada10 ? formatPYG(item.gravada10) : "");
     setFormGravada5(item.gravada5 ? formatPYG(item.gravada5) : "");
     setFormExenta(item.exenta ? formatPYG(item.exenta) : "");
@@ -306,8 +421,6 @@ export default function MovimientosPage() {
     if (!file) return;
 
     setIsScanning(true);
-    setScanStatusMessage("Convirtiendo PDF/Imagen a PNG y extrayendo datos con IA...");
-
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -324,62 +437,27 @@ export default function MovimientosPage() {
 
       setEditingId(null);
       setFormType(docData.financialType || "expense");
+      setIsFiscalInvoice(true);
       setFormDocType(docData.docType || "Factura");
       setFormAmountInput(formatPYG(docData.amount));
       setFormDescription(docData.productDetail || "Comprobante Escaneado");
       setFormCategory(docData.category || "Otros Gastos");
       setFormCounterparty(docData.businessName || "Comercio Emisor");
-      setFormPaymentMethod("Transferencia");
       setFormDate(docData.date || new Date().toISOString().split("T")[0]);
-      setFormDocNumber(docData.documentNumber || "001-001-0000001");
+      setFormDocNumber(docData.documentNumber || "");
       setFormCdc(docData.cdc || "");
       setFormIsMyExpense(true);
-      setFormGravada10(formatPYG(docData.gravada10 || docData.amount));
-      setFormGravada5(formatPYG(docData.gravada5 || 0));
-      setFormExenta(formatPYG(docData.exenta || 0));
+      setFormGravada10(docData.gravada10 ? formatPYG(docData.gravada10) : "");
+      setFormGravada5(docData.gravada5 ? formatPYG(docData.gravada5) : "");
+      setFormExenta(docData.exenta ? formatPYG(docData.exenta) : "");
       setShowModal(true);
     } catch (err) {
       console.error(err);
-      alert("Error al procesar el archivo.");
+      alert("Error al procesar el archivo mediante IA.");
     } finally {
       setIsScanning(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  };
-
-  const exportToExcel = () => {
-    const facturas = myTransactions.filter(t => !(t.docType || "").toLowerCase().includes("recibo"));
-    if (facturas.length === 0) {
-      alert("No hay facturas propias para exportar.");
-      return;
-    }
-
-    let csvContent = "data:text/csv;charset=utf-8,Fecha;Tipo Doc;N° Documento;CDC;Emisor;Concepto;Monto Total (PYG);Gravada 10%;Gravada 5%;Exenta;IVA 10%\r\n";
-
-    facturas.forEach(t => {
-      const g10 = t.gravada10 || 0;
-      const g5 = t.gravada5 || 0;
-      const ex = t.exenta || 0;
-      const iva10 = g10 / 11;
-      csvContent += `${t.date};${t.docType || "Factura"};${t.documentNumber || "S/N"};${t.cdc || ""};${t.counterpartyName || ""};${t.description};${t.amount};${g10};${g5};${ex};${iva10.toFixed(0)}\r\n`;
-    });
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Facturas_Marangato_${new Date().toISOString().split("T")[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const downloadImage = (imgSrc: string) => {
-    const link = document.createElement("a");
-    link.href = imgSrc;
-    link.download = `Comprobante_${formDocNumber || "documento"}_${Date.now()}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -389,42 +467,78 @@ export default function MovimientosPage() {
 
     setIsSubmitting(true);
     try {
-      const payload = {
+      const basePayload: Record<string, any> = {
         userId: user.uid,
         amount: cleanAmt,
         currency: "PYG",
         type: formType,
-        docType: formDocType,
+        isFiscalInvoice,
+        docType: isFiscalInvoice ? formDocType : "Gasto Común",
         categoryId: formCategory,
         description: formDescription.trim(),
         counterpartyName: formCounterparty.trim() || "Comercio Emisor",
-        paymentMethod: formPaymentMethod,
         date: formDate,
-        documentNumber: formDocNumber.trim() || "001-001-0000001",
+        documentNumber: formDocNumber.trim() || "S/N",
         cdc: formCdc.trim() || "",
         isMyExpense: formIsMyExpense,
-        gravada10: parsePYG(formGravada10),
-        gravada5: parsePYG(formGravada5),
-        exenta: parsePYG(formExenta),
+        isInstallment: Boolean(isInstallment),
+        isLoan: Boolean(isLoan),
+        interestRate: isInstallment ? parseFloat(installmentInterest) || 0 : 0,
+        gravada10: parsePYG(formGravada10) || 0,
+        gravada5: parsePYG(formGravada5) || 0,
+        exenta: parsePYG(formExenta) || 0,
         receiptImages: scannedImages,
       };
 
+      if (isInstallment) {
+        basePayload.installmentCurrent = 1;
+        basePayload.installmentTotal = parseInt(installmentTotal) || 12;
+        basePayload.isPaid = false;
+      }
+
+      if (isLoan) {
+        basePayload.loanRemainingBalance = cleanAmt;
+      }
+
       if (editingId) {
         await updateDoc(doc(db, "transactions", editingId), {
-          ...payload,
+          ...basePayload,
           updatedAt: serverTimestamp(),
         });
       } else {
-        await addDoc(collection(db, "transactions"), {
-          ...payload,
-          createdAt: serverTimestamp(),
-        });
+        if (isInstallment) {
+          const totalInst = parseInt(installmentTotal) || 12;
+          const monthlyAmount = cleanAmt / totalInst;
+          const [y, m, d] = formDate.split("-").map(Number);
+
+          for (let i = 1; i <= totalInst; i++) {
+            const instDateObj = new Date(y, (m - 1) + (i - 1), d || 1);
+            const instDateStr = instDateObj.toISOString().split("T")[0];
+
+            await addDoc(collection(db, "transactions"), {
+              ...basePayload,
+              amount: monthlyAmount,
+              installmentCurrent: i,
+              installmentTotal: totalInst,
+              description: `${formDescription.trim()} (Cuota ${i}/${totalInst})`,
+              date: instDateStr,
+              isPaid: i === 1,
+              createdAt: serverTimestamp(),
+            });
+          }
+        } else {
+          await addDoc(collection(db, "transactions"), {
+            ...basePayload,
+            createdAt: serverTimestamp(),
+          });
+        }
       }
 
       setShowModal(false);
       setScannedImages([]);
     } catch (err) {
-      console.error(err);
+      console.error("Error al guardar en Firebase:", err);
+      alert("No se pudo guardar el registro. Revisa la consola.");
     } finally {
       setIsSubmitting(false);
     }
@@ -443,242 +557,291 @@ export default function MovimientosPage() {
     }
   };
 
+  const exportToExcel = () => {
+    if (filteredList.length === 0) {
+      alert("No hay registros para exportar.");
+      return;
+    }
+
+    let csvContent = "data:text/csv;charset=utf-8,Fecha;Tipo;Concepto;Categoria;Emisor;Monto (PYG)\r\n";
+    filteredList.forEach(t => {
+      csvContent += `${t.date};${t.type};"${t.description}";"${t.categoryId}";"${t.counterpartyName || ""}";${t.amount}\r\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Reporte_Movimientos_${selectedYear}_${selectedMonth + 1}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadImage = (imgSrc: string) => {
+    const link = document.createElement("a");
+    link.href = imgSrc;
+    link.download = `Comprobante_${Date.now()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const monthNames = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+  ];
+  const shortMonthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic"];
+  const availableYears = Array.from({ length: 16 }, (_, i) => 2020 + i);
+
+  // ==========================================
+  // 9. RENDERIZADO VISUAL PROFESIONAL
+  // ==========================================
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 pb-28 md:pb-12 px-4 sm:px-6 animate-in fade-in duration-300">
-      <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.docx" onChange={handleFileScan} className="hidden" />
+      
+      <input ref={fileInputRef} type="file" accept="image/*,application/pdf" onChange={handleFileScan} className="hidden" />
 
-      {/* 1. CABECERA */}
+      <SyncMailModal
+        isOpen={showSyncMailModal}
+        onClose={() => setShowSyncMailModal(false)}
+        userEmail={user?.email || ""}
+        onSyncComplete={(newTransactions) => console.log(newTransactions)}
+      />
+
+      {/* CABECERA CON BOTONES MODERNOS */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/60 pb-6 pt-2">
         <div className="space-y-1">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[11px] font-semibold tracking-wide uppercase">
-            <Sparkles className="h-3 w-3" /> Gestión Fiscal y Contable de Facturas
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold tracking-wide uppercase shadow-sm">
+            <Sparkles className="h-3.5 w-3.5" /> Módulo Financiero Avanzado
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
-            Libro de Movimientos
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-3">
+            Libro de Movimientos y Cuotas
           </h1>
           <p className="text-xs text-slate-400">
-            Control de facturas propias, de terceros, recibos, cálculo de IVA para Marangato y exportación a Excel.
+            Control de ingresos, egresos, facturas fiscales, cuotas con check y préstamos bancarios.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button
-            size="sm"
-            onClick={exportToExcel}
-            className="h-10 px-4 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-2 transition-all"
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            <span>Exportar Excel (Marangato)</span>
+          <Button size="sm" onClick={exportToExcel} className="h-10 px-4 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm">
+            <FileSpreadsheet className="h-4 w-4" /> Exportar Excel
           </Button>
 
-          <Button
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isScanning}
-            className="h-10 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:brightness-110 text-white text-xs font-bold gap-2 shadow-lg shadow-blue-500/25 transition-all"
-          >
+          <Button size="sm" onClick={() => setShowSyncMailModal(true)} className="h-10 px-4 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30 hover:bg-purple-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm">
+            <Mail className="h-4 w-4" /> Sincronizar Correo
+          </Button>
+
+          <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={isScanning} className="h-10 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:brightness-110 text-white text-xs font-bold gap-2 shadow-lg shadow-blue-500/25 transition-all">
             {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-            <span>{isScanning ? "Procesando..." : "Escanear Documento"}</span>
+            <span>{isScanning ? "Analizando IA..." : "Escanear Documento"}</span>
           </Button>
 
-          <Button
-            size="sm"
-            onClick={() => handleOpenCreate("expense")}
-            className="h-10 px-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold gap-2 shadow-lg shadow-rose-600/25 transition-all"
-          >
-            <PlusCircle className="h-4 w-4" />
-            Nuevo Gasto
+          <Button size="sm" onClick={() => handleOpenCreate("expense")} className="h-10 px-5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:brightness-110 text-white text-xs font-extrabold gap-2 shadow-lg shadow-rose-600/30 transition-all">
+            <PlusCircle className="h-4 w-4" /> Nuevo Movimiento
           </Button>
         </div>
       </div>
 
-      {/* BANNER DE RESUMEN IVA MARANGATO */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="rounded-3xl border border-blue-500/30 bg-blue-950/40 p-5 backdrop-blur-md shadow-lg space-y-1">
-          <span className="text-[11px] font-extrabold uppercase tracking-widest text-blue-300">IVA 10% Crédito</span>
-          <p className="text-xl font-black text-blue-400 font-mono">{formatPYG(marangatoTaxSummary.iva10)} ₲</p>
-        </div>
-        <div className="rounded-3xl border border-blue-500/30 bg-blue-950/40 p-5 backdrop-blur-md shadow-lg space-y-1">
-          <span className="text-[11px] font-extrabold uppercase tracking-widest text-blue-300">IVA 5% Crédito</span>
-          <p className="text-xl font-black text-blue-400 font-mono">{formatPYG(marangatoTaxSummary.iva5)} ₲</p>
-        </div>
-        <div className="rounded-3xl border border-blue-500/30 bg-blue-950/40 p-5 backdrop-blur-md shadow-lg space-y-1">
-          <span className="text-[11px] font-extrabold uppercase tracking-widest text-blue-300">Total IVA Crédito</span>
-          <p className="text-xl font-black text-cyan-400 font-mono">{formatPYG(marangatoTaxSummary.totalIva)} ₲</p>
-        </div>
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-md shadow-lg space-y-1">
-          <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Balance Neto (Propios)</span>
-          <p className={`text-xl font-black font-mono ${currentBalance >= 0 ? "text-slate-100" : "text-rose-400"}`}>
-            {formatPYG(currentBalance)} ₲
-          </p>
-        </div>
-      </div>
+      {/* SELECTOR DE CALENDARIO MODERNO */}
+      <div className="relative z-50 bg-slate-900/90 p-4 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button size="sm" variant="outline" onClick={() => setShowDatePicker(!showDatePicker)} className="h-10 px-4 rounded-2xl border-slate-700 bg-slate-950 text-xs font-bold text-slate-200 hover:text-cyan-400 hover:border-cyan-500/40 gap-2.5 transition-all">
+            <CalendarIcon className="h-4 w-4 text-cyan-400" />
+            <span>{monthNames[selectedMonth]} {selectedYear}</span>
+          </Button>
 
-      {/* PANEL DE SINCRONIZACIÓN DE CORREO QUE ABRE EL MODAL LIMPIO */}
-      <div className="relative overflow-hidden rounded-3xl border border-blue-500/30 bg-gradient-to-br from-blue-950/60 via-slate-900/90 to-indigo-950/50 p-6 backdrop-blur-xl shadow-2xl space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
-          <div className="flex items-start gap-4">
-            <div className="p-3.5 bg-blue-600/20 text-blue-400 rounded-2xl border border-blue-500/30 shrink-0 shadow-inner">
-              <Mail className="h-6 w-6" />
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-2xl border border-slate-800">
+            <Button size="icon" variant="ghost" onClick={() => { if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(prev => prev - 1); } else { setSelectedMonth(prev => prev - 1); } }} className="h-7 w-7 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-xs font-mono font-bold text-slate-200 px-2 min-w-[90px] text-center">
+              {shortMonthNames[selectedMonth]} {selectedYear}
+            </span>
+            <Button size="icon" variant="ghost" onClick={() => { if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(prev => prev + 1); } else { setSelectedMonth(selectedMonth + 1); } }} className="h-7 w-7 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {showDatePicker && (
+          <div className="mt-4 p-5 rounded-3xl border border-slate-700 bg-slate-950 shadow-2xl z-[100] absolute top-full left-0 w-full sm:w-80 backdrop-blur-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Seleccionar Periodo</span>
+              <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} className="h-8 rounded-xl border border-slate-800 bg-slate-900 px-3 text-xs text-cyan-400 font-bold font-mono outline-none">
+                {availableYears.map(yr => (<option key={yr} value={yr}>{yr}</option>))}
+              </select>
             </div>
-            <div className="space-y-1">
-              <h4 className="text-white font-bold text-base flex items-center gap-2">
-                Sincronización Automática con Gmail <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px]">IMAP</span>
-              </h4>
-              <p className="text-slate-300 text-xs leading-relaxed max-w-xl">
-                Extrae y convierte automáticamente todas las facturas de tu bandeja para <b className="text-blue-400">{user?.email}</b>.
-              </p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {shortMonthNames.map((name, idx) => (
+                <button key={name} onClick={() => { setSelectedMonth(idx); setShowDatePicker(false); }} className={`py-2 px-3 rounded-xl text-xs font-bold transition-all ${idx === selectedMonth ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg" : "bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800"}`}>
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* TARJETAS RESUMEN */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/30 p-6 shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Total Ingresos del Mes</span>
+            <div className="rounded-2xl bg-emerald-500/10 p-2.5 text-emerald-400 border border-emerald-500/20"><ArrowUpRight className="h-4 w-4" /></div>
+          </div>
+          <div className="mt-3 text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
+            +{formatPYG(totalIncomes)} ₲
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-rose-500/30 bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950/30 p-6 shadow-xl">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-400">Total Gastos y Cuotas</span>
+            <div className="rounded-2xl bg-rose-500/10 p-2.5 text-rose-400 border border-rose-500/20"><ArrowDownRight className="h-4 w-4" /></div>
+          </div>
+          <div className="mt-3 text-2xl sm:text-3xl font-black text-rose-400 font-mono">
+            -{formatPYG(totalExpenses)} ₲
+          </div>
+        </div>
+      </div>
+
+      {/* GRÁFICO EXTENDIDO */}
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 backdrop-blur-xl shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-cyan-400 animate-pulse" />
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">
+                Evolución Analítica Contable
+              </h3>
+              <p className="text-[10px] text-slate-400">Ingresos, Gastos Comunes, Cuotas y Préstamos</p>
             </div>
           </div>
 
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => setShowSyncMailModal(true)}
-            className="h-11 px-6 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs gap-2 shadow-lg shadow-blue-600/30 transition-all shrink-0"
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            <span>Sincronizar Facturas del Correo</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-3 text-[10px] font-bold">
+            <span className="flex items-center gap-1 text-emerald-400"><span className="h-2 w-2 rounded-full bg-emerald-500"></span> Ingresos</span>
+            <span className="flex items-center gap-1 text-rose-400"><span className="h-2 w-2 rounded-full bg-rose-500"></span> Gastos</span>
+            <span className="flex items-center gap-1 text-amber-400"><span className="h-2 w-2 rounded-full bg-amber-500"></span> Cuotas</span>
+            <span className="flex items-center gap-1 text-purple-400"><span className="h-2 w-2 rounded-full bg-purple-500"></span> Préstamos</span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto pb-2 pt-2">
+          <div className="min-w-[650px] relative">
+            <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-44 overflow-visible">
+              <defs>
+                <linearGradient id="lInc" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#34d399" /></linearGradient>
+                <linearGradient id="lExp" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f43f5e" /><stop offset="100%" stopColor="#fb7185" /></linearGradient>
+                <linearGradient id="lInst" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f59e0b" /><stop offset="100%" stopColor="#fbbf24" /></linearGradient>
+                <linearGradient id="lLn" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#a855f7" /><stop offset="100%" stopColor="#c084fc" /></linearGradient>
+              </defs>
+
+              {pointsCoords.inc.length > 1 && <path d={pointsCoords.inc.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lInc)" strokeWidth="2.5" />}
+              {pointsCoords.exp.length > 1 && <path d={pointsCoords.exp.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lExp)" strokeWidth="2.5" />}
+              {pointsCoords.inst.length > 1 && <path d={pointsCoords.inst.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lInst)" strokeWidth="2.5" />}
+              {pointsCoords.ln.length > 1 && <path d={pointsCoords.ln.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lLn)" strokeWidth="2.5" />}
+            </svg>
+
+            <div className="flex justify-between px-4 pt-2 border-t border-slate-800/80">
+              {chartData.map((d, i) => (<span key={i} className="text-[10px] text-slate-500 font-mono text-center flex-1">{d.label}</span>))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* PESTAÑAS PRINCIPALES: FACTURAS PROPIAS, TERCEROS Y RECIBOS */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab("propias")}
-          className={`px-6 py-2.5 rounded-2xl font-bold text-xs transition-all shrink-0 ${
-            activeTab === "propias" ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30" : "bg-slate-900 text-slate-400 hover:text-white"
-          }`}
-        >
-          📄 Facturas Propias (Deducibles / Dashboard)
-        </button>
-        <button
-          onClick={() => setActiveTab("terceros")}
-          className={`px-6 py-2.5 rounded-2xl font-bold text-xs transition-all shrink-0 ${
-            activeTab === "terceros" ? "bg-amber-600 text-white shadow-lg shadow-amber-600/30" : "bg-slate-900 text-slate-400 hover:text-white"
-          }`}
-        >
-          👥 Facturas de Terceros (No Deducibles)
-        </button>
-        <button
-          onClick={() => setActiveTab("recibos")}
-          className={`px-6 py-2.5 rounded-2xl font-bold text-xs transition-all shrink-0 ${
-            activeTab === "recibos" ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30" : "bg-slate-900 text-slate-400 hover:text-white"
-          }`}
-        >
-          🧾 Recibos de Dinero
-        </button>
-      </div>
+      {/* LISTADO DE MOVIMIENTOS CON CHECK DE CUOTAS Y EDICIÓN */}
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 backdrop-blur-2xl shadow-2xl space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-2">
+            <ReceiptText className="h-5 w-5 text-blue-400" />
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-slate-100">Registro General de Movimientos y Cuotas</h3>
+              <p className="text-[11px] text-slate-400">Mostrando {filteredList.length} registros del periodo</p>
+            </div>
+          </div>
 
-      {/* BARRA DE BÚSQUEDA Y FILTROS */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/80 p-4 rounded-3xl border border-slate-800/80 backdrop-blur-xl shadow-lg">
-        <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
-          <Input
-            placeholder="Buscar por concepto, comercio, N° de documento (ej: 001-001...), CDC o categoría..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="h-10 pl-10 text-xs rounded-2xl border-slate-800 bg-slate-950 text-slate-100 shadow-inner"
-          />
-        </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative flex-1 sm:w-44">
+              <Search className="absolute left-3.5 top-3 h-3.5 w-3.5 text-slate-500" />
+              <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-10 pl-9 text-xs rounded-2xl border-slate-800 bg-slate-950 text-slate-100 shadow-inner" />
+            </div>
 
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setSortOrder((p) => (p === "desc" ? "asc" : "desc"))}
-          className="h-10 px-4 rounded-2xl border-slate-800 bg-slate-950 text-xs font-bold text-slate-300 hover:text-white"
-        >
-          <ArrowUpDown className="h-3.5 w-3.5 text-blue-400 mr-1.5" />
-          {sortOrder === "desc" ? "Más Recientes" : "Más Antiguos"}
-        </Button>
-      </div>
-
-      {/* LISTADO DE MOVIMIENTOS */}
-      <div className="rounded-3xl border border-slate-800/80 bg-slate-900/80 p-5 sm:p-7 backdrop-blur-2xl shadow-2xl space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
-          <span className="text-xs font-extrabold text-slate-300 uppercase tracking-widest">
-            {filteredList.length} Registros en {activeTab === "propias" ? "Facturas Propias" : activeTab === "terceros" ? "Facturas de Terceros" : "Recibos"}
-          </span>
-          <span className="text-xs font-mono text-slate-500">Página {currentPage} de {totalPages}</span>
+            <Button size="sm" variant="outline" onClick={() => setSortOrder((p) => (p === "desc" ? "asc" : "desc"))} className="h-10 px-4 rounded-2xl border-slate-800 bg-slate-950 text-xs font-bold text-slate-300 hover:text-white">
+              <ArrowUpDown className="h-3.5 w-3.5 text-blue-400 mr-1.5" />
+              {sortOrder === "desc" ? "Nuevos" : "Antiguos"}
+            </Button>
+          </div>
         </div>
 
         {loading ? (
-          <div className="py-16 flex justify-center items-center">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          </div>
+          <div className="py-16 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>
         ) : filteredList.length === 0 ? (
           <div className="py-16 text-center text-xs text-slate-400 border border-dashed border-slate-800 rounded-3xl space-y-2 bg-slate-950/30">
-            <p className="font-bold text-slate-300">No hay registros en esta sección</p>
-            <p className="text-slate-500">Escanea una factura o sincroniza tu correo para comenzar.</p>
+            <p className="font-bold text-slate-300">No hay movimientos en esta sección.</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-800/60">
             {paginatedList.map((item) => {
               const imgs = item.receiptImages || [];
-              const isMyExp = item.isMyExpense !== false;
+              const isInc = item.type === "income";
 
               return (
                 <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-3 hover:bg-slate-950/60 px-3 rounded-2xl transition-all border border-transparent hover:border-slate-800/50">
                   <div className="flex items-start sm:items-center gap-3.5">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl shrink-0 shadow-inner bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                      <ReceiptText className="h-5 w-5" />
+                    
+                    {/* Check de Cuotas */}
+                    {item.isInstallment && (
+                      <button
+                        type="button"
+                        onClick={() => toggleInstallmentPaid(item)}
+                        title={item.isPaid ? "Cuota Pagada" : "Cuota Pendiente"}
+                        className={`h-6 w-6 rounded-xl border flex items-center justify-center transition-all shrink-0 font-bold ${
+                          item.isPaid ? "bg-emerald-500 border-emerald-400 text-slate-950 shadow-md shadow-emerald-500/20" : "bg-slate-950 border-slate-700 text-transparent"
+                        }`}
+                      >
+                        ✓
+                      </button>
+                    )}
+
+                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl shrink-0 shadow-inner ${isInc ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border border-rose-500/20"}`}>
+                      {isInc ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
                     </div>
 
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-bold text-slate-100 text-sm leading-snug">{item.description}</p>
-                        <span className="px-2 py-0.5 rounded-md bg-blue-900/40 text-blue-300 text-[10px] font-bold border border-blue-500/20">
-                          {item.docType || "Factura"}
-                        </span>
-                        {item.documentNumber && item.documentNumber !== "S/N" && (
-                          <span className="px-2 py-0.5 rounded-md bg-slate-800 text-cyan-300 text-[10px] font-mono font-bold">
-                            N° {item.documentNumber}
+                        
+                        {item.isInstallment && (
+                          <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20">
+                            Cuota {item.installmentCurrent}/{item.installmentTotal} {item.isPaid ? "(Pagado)" : "(Pendiente)"}
                           </span>
                         )}
-                        {!isMyExp && (
-                          <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20">
-                            Gasto de Tercero
+
+                        {item.isLoan && (
+                          <span className="px-2.5 py-0.5 rounded-lg bg-purple-500/10 text-purple-400 text-[10px] font-bold border border-purple-500/20">
+                            Préstamo
                           </span>
                         )}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 font-mono">
-                        <span className="text-slate-300">{item.counterpartyName || "Emisor"}</span>
-                        <span>•</span>
-                        <span>{item.date}</span>
-                        {item.cdc && (
-                          <>
-                            <span>•</span>
-                            <span className="text-cyan-400/80 truncate max-w-xs" title={item.cdc}>CDC: {item.cdc}</span>
-                          </>
-                        )}
-                      </div>
+                      <p className="text-[11px] text-slate-400 font-mono">
+                        {item.counterpartyName || "Emisor"} • Categoría: <span className="text-cyan-400">{item.categoryId}</span> • Fecha: {item.date}
+                      </p>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between sm:justify-end gap-4 pl-14 sm:pl-0">
-                    <span className="font-mono font-black text-base sm:text-lg text-slate-100">
-                      {formatPYG(item.amount)} ₲
+                    <span className={`font-mono font-black text-base sm:text-lg ${isInc ? "text-emerald-400" : "text-rose-400"}`}>
+                      {isInc ? "+" : "-"}{formatPYG(item.amount)} ₲
                     </span>
 
                     <div className="flex items-center gap-1.5">
                       {imgs.length > 0 && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => setZoomImageModal(imgs[0])}
-                          title="Ver documento en PNG y hacer zoom"
-                          className="h-9 w-9 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-xl transition-colors"
-                        >
+                        <Button size="icon" variant="ghost" onClick={() => setZoomImageModal(imgs[0])} title="Ver PNG" className="h-9 w-9 text-cyan-400 hover:bg-cyan-500/10 rounded-xl">
                           <Eye className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button size="icon" variant="ghost" onClick={() => handleOpenEdit(item)} className="h-9 w-9 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors">
-                        <Edit3 className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" onClick={() => setItemToDelete(item)} className="h-9 w-9 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <Button size="icon" variant="ghost" onClick={() => handleOpenEdit(item)} title="Editar monto y datos" className="h-9 w-9 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl"><Edit3 className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" onClick={() => setItemToDelete(item)} className="h-9 w-9 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl"><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 </div>
@@ -686,92 +849,81 @@ export default function MovimientosPage() {
             })}
           </div>
         )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-slate-800 pt-3 text-xs">
+            <span className="text-slate-400 font-mono">Página {currentPage} de {totalPages}</span>
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="h-8 px-3 rounded-xl border-slate-800 bg-slate-950 text-xs font-semibold text-slate-300">Anterior</Button>
+              <Button size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="h-8 px-3 rounded-xl border-slate-800 bg-slate-950 text-xs font-semibold text-slate-300">Siguiente</Button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* MODAL FORMULARIO DE REGISTRO / EDICIÓN */}
+      {/* MODAL CREAR / EDITAR CON CAMPOS FISCALES COMPLETOS Y CLASIFICACIÓN */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
           <div className="w-full max-w-xl rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
             <div className="border-b border-slate-800 bg-slate-950/80 p-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-extrabold text-white flex items-center gap-2.5">
-                  <Sparkles className="h-5 w-5 text-cyan-400" />
-                  {editingId ? "Modificar Comprobante" : "Registrar Comprobante Escaneado"}
+                  <Sparkles className="h-5 w-5 text-cyan-400" /> {editingId ? "Modificar Movimiento" : "Registrar Comprobante / Movimiento"}
                 </h3>
                 <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 px-3 rounded-xl border-slate-700 bg-slate-950 text-[11px] text-cyan-400">
-                  <RefreshCw className="h-3 w-3 mr-1" /> Cambiar Archivo
+                  <RefreshCw className="h-3 w-3 mr-1" /> Escanear Archivo
                 </Button>
               </div>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+              
               {scannedImages.length > 0 && (
                 <div className="relative rounded-2xl border border-slate-800 bg-slate-950 p-3 flex flex-col items-center justify-center">
                   <div className="w-full flex items-center justify-between px-2 py-1 text-[11px] text-slate-400 border-b border-slate-800 mb-2.5">
                     <span className="flex items-center gap-1.5 text-cyan-300 font-bold">
                       <Eye className="h-4 w-4" /> Página {activePageIndex + 1} de {scannedImages.length}
                     </span>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => downloadImage(scannedImages[activePageIndex])}
-                        className="h-7 px-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 text-[11px] font-bold gap-1"
-                      >
-                        <Download className="h-3.5 w-3.5" /> Descargar PNG
-                      </Button>
-
-                      {scannedImages.length > 1 && (
-                        <div className="flex items-center gap-1">
-                          <Button type="button" variant="ghost" size="icon" disabled={activePageIndex === 0} onClick={() => setActivePageIndex((p) => Math.max(0, p - 1))} className="h-6 w-6 text-slate-300">
-                            <ChevronLeft className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button type="button" variant="ghost" size="icon" disabled={activePageIndex === scannedImages.length - 1} onClick={() => setActivePageIndex((p) => Math.min(scannedImages.length - 1, p + 1))} className="h-6 w-6 text-slate-300">
-                            <ChevronRight className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => downloadImage(scannedImages[activePageIndex])} className="h-7 px-2 text-emerald-400 text-[11px] font-bold gap-1">
+                      <Download className="h-3.5 w-3.5" /> Descargar PNG
+                    </Button>
                   </div>
-
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={scannedImages[activePageIndex]}
-                    alt={`Página ${activePageIndex + 1}`}
-                    onClick={() => setZoomImageModal(scannedImages[activePageIndex])}
-                    className="max-h-56 object-contain rounded-xl border border-slate-800 shadow-md cursor-zoom-in bg-white hover:opacity-95 transition-opacity"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-2 font-mono">Haz clic en la imagen para abrir el visor con zoom detallado.</p>
+                  <img src={scannedImages[activePageIndex]} alt="Comprobante" onClick={() => setZoomImageModal(scannedImages[activePageIndex])} className="max-h-48 object-contain rounded-xl border border-slate-800 cursor-zoom-in bg-white" />
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300 font-bold">Tipo de Documento</Label>
-                  <select value={formDocType} onChange={(e) => setFormDocType(e.target.value)} className="w-full h-11 rounded-2xl border border-slate-800 bg-slate-950 px-4 text-xs text-slate-100 outline-none font-medium">
-                    <option value="Factura">Factura</option>
-                    <option value="Nota de Crédito">Nota de Crédito</option>
-                    <option value="Nota de Remisión">Nota de Remisión</option>
-                    <option value="Recibo">Recibo de Dinero</option>
-                    <option value="Ticket">Ticket</option>
+                  <Label className="text-xs text-slate-300 font-bold">Tipo de Operación</Label>
+                  <select value={formType} onChange={(e) => setFormType(e.target.value as any)} className={`w-full h-11 rounded-2xl border px-4 text-xs font-bold outline-none ${formType === "income" ? "border-emerald-500/50 bg-emerald-950/30 text-emerald-300" : "border-rose-500/50 bg-rose-950/30 text-rose-300"}`}>
+                    <option value="expense">Gasto / Egreso</option>
+                    <option value="income">Ingreso / Entrada</option>
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300 font-bold">¿Es tu gasto (RUC propio)?</Label>
-                  <select value={formIsMyExpense ? "true" : "false"} onChange={(e) => setFormIsMyExpense(e.target.value === "true")} className="w-full h-11 rounded-2xl border border-slate-800 bg-slate-950 px-4 text-xs text-slate-100 outline-none font-medium">
-                    <option value="true">Sí (Gasto deducible / Dashboard)</option>
-                    <option value="false">No (Gasto de Tercero / Solo Movimientos)</option>
+                  <Label className="text-xs text-slate-300 font-bold">Clasificación del Gasto</Label>
+                  <select
+                    value={isFiscalInvoice ? "fiscal" : "common"}
+                    onChange={(e) => {
+                      const val = e.target.value === "fiscal";
+                      setIsFiscalInvoice(val);
+                    }}
+                    className="w-full h-11 rounded-2xl border border-slate-800 bg-slate-950 px-4 text-xs text-slate-100 outline-none font-medium"
+                  >
+                    <option value="fiscal">Factura Fiscal (Con CDC / RUC)</option>
+                    <option value="common">Gasto Común / Sin Comprobante</option>
                   </select>
                 </div>
               </div>
 
+              {/* Monto con teclado numérico nativo */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-300 font-bold">Monto Total (PYG ₲)</Label>
+                <Label className="text-xs text-slate-300 font-bold">Monto Total (PYG ₲) *</Label>
                 <Input
                   type="text"
+                  inputMode="numeric"
                   required
                   value={formAmountInput}
                   onChange={(e) => setFormAmountInput(e.target.value)}
@@ -779,95 +931,99 @@ export default function MovimientosPage() {
                     const parsed = parsePYG(formAmountInput);
                     if (parsed > 0) setFormAmountInput(formatPYG(parsed));
                   }}
+                  placeholder="Ej: 150000"
                   className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 font-black text-base px-4 font-mono"
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-slate-400 font-bold">Gravada 10%</Label>
-                  <Input value={formGravada10} onChange={(e) => setFormGravada10(e.target.value)} className="h-9 rounded-xl border-slate-800 bg-slate-950 text-slate-200 text-xs px-3 font-mono" />
+              {/* SELECCIÓN DUAL: CUOTAS Y PRÉSTAMOS */}
+              {formType === "expense" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-300 flex items-center gap-1.5 text-[11px]"><CreditCard className="h-4 w-4" /> En Cuotas Mes a Mes</span>
+                      <input type="checkbox" checked={isInstallment} onChange={(e) => setIsInstallment(e.target.checked)} className="h-4 w-4 rounded border-slate-800 bg-slate-950 text-amber-500 cursor-pointer" />
+                    </div>
+                    {isInstallment && (
+                      <div className="space-y-2 pt-2 border-t border-amber-500/20">
+                        <div>
+                          <Label className="text-[10px] text-amber-200">Total de Meses / Plazos</Label>
+                          <Input type="number" inputMode="numeric" min={2} max={60} value={installmentTotal} onChange={(e) => setInstallmentTotal(e.target.value)} className="h-8 rounded-xl border-slate-800 bg-slate-950 text-amber-300 font-mono text-xs" />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-amber-200">% Interés por Mora (Opcional)</Label>
+                          <Input type="number" inputMode="numeric" min={0} max={100} value={installmentInterest} onChange={(e) => setInstallmentInterest(e.target.value)} placeholder="Ej: 5" className="h-8 rounded-xl border-slate-800 bg-slate-950 text-amber-300 font-mono text-xs" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-purple-500/30 bg-purple-950/20 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-purple-300 flex items-center gap-1.5 text-[11px]"><Percent className="h-4 w-4" /> Es Préstamo</span>
+                      <input type="checkbox" checked={isLoan} onChange={(e) => setIsLoan(e.target.checked)} className="h-4 w-4 rounded border-slate-800 bg-slate-950 text-purple-500 cursor-pointer" />
+                    </div>
+                    {isLoan && (
+                      <div className="pt-2 border-t border-purple-500/20">
+                        <p className="text-[10px] text-slate-300">Usa el monto principal como saldo del préstamo.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-slate-400 font-bold">Gravada 5%</Label>
-                  <Input value={formGravada5} onChange={(e) => setFormGravada5(e.target.value)} className="h-9 rounded-xl border-slate-800 bg-slate-950 text-slate-200 text-xs px-3 font-mono" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-slate-400 font-bold">Exenta</Label>
-                  <Input value={formExenta} onChange={(e) => setFormExenta(e.target.value)} className="h-9 rounded-xl border-slate-800 bg-slate-950 text-slate-200 text-xs px-3 font-mono" />
-                </div>
+              )}
+
+              {/* Campos fiscales opcionales condicionales */}
+              {formType === "expense" && isFiscalInvoice && (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-400 font-bold">Gravada 10%</Label><Input inputMode="numeric" value={formGravada10} onChange={(e) => setFormGravada10(e.target.value)} className="h-9 rounded-xl border-slate-800 bg-slate-950 text-slate-200 text-xs px-3 font-mono" /></div>
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-400 font-bold">Gravada 5%</Label><Input inputMode="numeric" value={formGravada5} onChange={(e) => setFormGravada5(e.target.value)} className="h-9 rounded-xl border-slate-800 bg-slate-950 text-slate-200 text-xs px-3 font-mono" /></div>
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-400 font-bold">Exenta</Label><Input inputMode="numeric" value={formExenta} onChange={(e) => setFormExenta(e.target.value)} className="h-9 rounded-xl border-slate-800 bg-slate-950 text-slate-200 text-xs px-3 font-mono" /></div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5"><Label className="text-xs text-slate-300 font-bold">Local / Emisor</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej. Supermercado" className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs text-slate-300 font-bold">N° de Documento</Label><Input value={formDocNumber} onChange={(e) => setFormDocNumber(e.target.value)} placeholder="001-001-0000001" className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4 font-mono" /></div>
+                  </div>
+
+                  <div className="space-y-1.5"><Label className="text-xs text-slate-300 font-bold">Código CDC (Factura Electrónica)</Label><Input value={formCdc} onChange={(e) => setFormCdc(e.target.value)} placeholder="01003798..." className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4 font-mono" /></div>
+                </>
+              )}
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-300 font-bold">Detalle / Concepto Amplio *</Label>
+                <textarea required rows={3} value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Describe detalladamente el concepto..." className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-100 outline-none resize-none font-medium" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300 font-bold">Local / Emisor</Label>
-                  <Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300 font-bold">N° de Documento (Ej: 001-001...)</Label>
-                  <Input placeholder="001-001-0000001" value={formDocNumber} onChange={(e) => setFormDocNumber(e.target.value)} className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4 font-mono" />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-300 font-bold">Código CDC (Factura Electrónica)</Label>
-                <Input placeholder="01003798..." value={formCdc} onChange={(e) => setFormCdc(e.target.value)} className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4 font-mono" />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-300 font-bold">Detalle / Concepto</Label>
-                <Input required value={formDescription} onChange={(e) => setFormDescription(e.target.value)} className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300 font-bold">Fecha de Emisión</Label>
-                  <Input type="date" required value={formDate} onChange={(e) => setFormDate(e.target.value)} className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4 font-mono" />
-                </div>
+                <div className="space-y-1.5"><Label className="text-xs text-slate-300 font-bold">Fecha de Emisión</Label><Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4 font-mono" /></div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-300 font-bold">Categoría</Label>
                   <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full h-11 rounded-2xl border border-slate-800 bg-slate-950 px-4 text-xs text-slate-100 outline-none">
-                    {CATEGORIES_EXPENSE.map((cat) => (
-                      <option key={cat.id} value={cat.id}>{cat.id}</option>
-                    ))}
+                    {(formType === "expense" ? CATEGORIES_EXPENSE.map(c => c.id) : CATEGORIES_INCOME).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                   </select>
                 </div>
               </div>
 
               <div className="flex justify-end gap-3 border-t border-slate-800 pt-4">
-                <Button type="button" variant="outline" onClick={() => setShowModal(false)} className="rounded-xl border-slate-700 text-xs text-slate-300 h-10 px-4">
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isSubmitting} className="rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white h-10 px-6">
-                  {isSubmitting ? "Guardando..." : "Confirmar y Guardar"}
-                </Button>
+                <Button type="button" variant="outline" onClick={() => setShowModal(false)} className="rounded-xl border-slate-700 text-xs text-slate-300 h-10 px-4">Cancelar</Button>
+                <Button type="submit" disabled={isSubmitting} className="rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white h-10 px-6">Confirmar y Guardar</Button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL ZOOM CON DESCARGA PNG DIRECTA */}
+      {/* MODAL ZOOM */}
       {zoomImageModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-2 backdrop-blur-md animate-in fade-in">
           <div className="relative w-full h-full overflow-auto flex flex-col items-center justify-center p-4">
             <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-              <Button
-                onClick={() => downloadImage(zoomImageModal)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg gap-2"
-              >
-                <Download className="h-4 w-4" /> Descargar PNG
-              </Button>
-              <Button
-                onClick={() => setZoomImageModal(null)}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg"
-              >
-                Cerrar Visor ✕
-              </Button>
+              <Button onClick={() => downloadImage(zoomImageModal)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold gap-2"><Download className="h-4 w-4" /> Descargar PNG</Button>
+              <Button onClick={() => setZoomImageModal(null)} className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold">Cerrar ✕</Button>
             </div>
-
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={zoomImageModal} alt="Zoom factura" className="max-w-[95vw] max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-slate-700 bg-white my-auto scale-110 origin-center transition-transform" />
+            <img src={zoomImageModal} alt="Zoom" className="max-w-[95vw] max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-slate-700 bg-white my-auto scale-110 origin-center" />
           </div>
         </div>
       )}
@@ -877,35 +1033,17 @@ export default function MovimientosPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in zoom-in-95">
           <div className="w-full max-w-sm rounded-3xl border border-slate-800 bg-slate-900 p-7 shadow-2xl space-y-4">
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
-                <AlertTriangle className="h-6 w-6" />
-              </div>
-              <div className="space-y-0.5">
-                <h3 className="text-base font-bold text-slate-100">¿Eliminar registro?</h3>
-                <p className="text-xs text-slate-400">Esta acción actualizará tu balance contable.</p>
-              </div>
+              <div className="h-12 w-12 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0"><AlertTriangle className="h-6 w-6" /></div>
+              <div className="space-y-0.5"><h3 className="text-base font-bold text-slate-100">¿Eliminar registro?</h3><p className="text-xs text-slate-400">Esta acción actualizará tu balance contable.</p></div>
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" size="sm" onClick={() => setItemToDelete(null)} className="rounded-xl border-slate-700 text-xs text-slate-300 h-10 px-4">
-                Cancelar
-              </Button>
-              <Button size="sm" disabled={isDeleting} onClick={confirmDelete} className="rounded-xl bg-rose-600 hover:bg-rose-500 font-bold text-xs text-white px-5">
-                {isDeleting ? "Eliminando..." : "Sí, Eliminar"}
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => setItemToDelete(null)} className="rounded-xl border-slate-700 text-xs text-slate-300">Cancelar</Button>
+              <Button size="sm" disabled={isDeleting} onClick={confirmDelete} className="rounded-xl bg-rose-600 hover:bg-rose-500 font-bold text-xs text-white px-5">Eliminar</Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* COMPONENTE MODAL DE SINCRONIZACIÓN DE CORREO (LIMPIO Y SIN PEDIR RUC MANUAL) */}
-      <SyncMailModal
-        isOpen={showSyncMailModal}
-        onClose={() => setShowSyncMailModal(false)}
-        userEmail={user?.email || ""}
-        onSyncComplete={(newTransactions) => {
-          console.log("Transacciones añadidas:", newTransactions);
-        }}
-      />
     </div>
   );
 }
