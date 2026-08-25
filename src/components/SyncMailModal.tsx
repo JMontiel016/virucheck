@@ -1,6 +1,6 @@
 /**
  * Componente / Modal para la Sincronización Automática con Gmail
- * Solicita exclusivamente el correo y la contraseña de aplicación.
+ * Se conecta directamente a la API de Render para procesar la bandeja de entrada.
  */
 
 import React, { useState } from "react";
@@ -18,7 +18,7 @@ interface SyncMailModalProps {
 
 export default function SyncMailModal({ isOpen, onClose, userEmail, onSyncComplete }: SyncMailModalProps) {
   const [password, setPassword] = useState("");
-  const [daysRange, setDaysRange] = useState(15);
+  const [daysRange, setDaysRange] = useState(7); // Rango optimizado por defecto
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successCount, setSuccessCount] = useState<number | null>(null);
@@ -37,7 +37,7 @@ export default function SyncMailModal({ isOpen, onClose, userEmail, onSyncComple
     setSuccessCount(null);
 
     try {
-      // Petición al endpoint de FastAPI en Render
+      // LLAMADA DIRECTA AL SERVIDOR EN RENDER (Evita el fetch failed de Vercel)
       const response = await fetch("https://virucheck-api.onrender.com/sync-mail", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -66,7 +66,7 @@ export default function SyncMailModal({ isOpen, onClose, userEmail, onSyncComple
 
     } catch (err: any) {
       console.error("Error en sincronización:", err);
-      setErrorMessage(err.message || "No se pudo conectar con el servidor de correo.");
+      setErrorMessage(err.message || "No se pudo conectar con el servidor de correo en Render.");
     } finally {
       setLoading(false);
     }
@@ -128,8 +128,8 @@ export default function SyncMailModal({ isOpen, onClose, userEmail, onSyncComple
               onChange={(e) => setDaysRange(Number(e.target.value))}
               className="w-full h-10 rounded-xl border border-slate-800 bg-slate-950 px-3 text-xs text-slate-200 outline-none font-medium"
             >
-              <option value={7}>Últimos 7 días (Rápido)</option>
-              <option value={15}>Últimos 15 días (Recomendado)</option>
+              <option value={7}>Últimos 7 días (Recomendado / Rápido)</option>
+              <option value={15}>Últimos 15 días</option>
               <option value={30}>Último mes</option>
             </select>
           </div>

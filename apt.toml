@@ -1,1 +1,0 @@
-apt.packages = ["tesseract-ocr", "libtesseract-dev", "tesseract-ocr-spa"]
