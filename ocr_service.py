@@ -1,6 +1,6 @@
 """
-Servicio backend de OCR y Procesamiento de Facturas (FastAPI)
-Optimizado para funcionar en Render de forma nativa sin comandos apt-get.
+Servicio backend de Sincronización y Procesamiento de Facturas (FastAPI)
+Optimizado para lectura nativa en PDF y filtrado estricto por fechas en Gmail.
 """
 
 from fastapi import FastAPI, UploadFile, File
@@ -10,9 +10,11 @@ from typing import Optional
 import pdfplumber
 import io
 import re
-from datetime import datetime
+import imaplib
+import email
+from datetime import datetime, timedelta
 
-app = FastAPI(title="ViruCheck API Ligera", version="3.0")
+app = FastAPI(title="ViruCheck API", version="3.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,17 +27,18 @@ class SyncMailRequest(BaseModel):
     email: str
     password: str
     startDate: Optional[str] = None
-    days: int = 7
+    endDate: Optional[str] = None
+    days: int = 30
+
+MONTHS_EN = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+
+def to_imap_date(dt: datetime) -> str:
+    return f"{dt.day:02d}-{MONTHS_EN[dt.month - 1]}-{dt.year}"
 
 def parse_extracted_text(raw_text: str):
-    """
-    Analiza el texto plano extraído de la factura de forma inteligente
-    para detectar montos, timbrados, tipo de documento, emisor y fechas.
-    """
     lower = raw_text.lower()
     lines = [l.strip() for l in raw_text.split("\n") if l.strip()]
 
-    # 1. Tipo de Documento Fiscal Exacto
     doc_type = "Factura"
     if any(k in lower for k in ["nota de credito", "nota de crédito", "nc nro"]):
         doc_type = "Nota de Crédito"
@@ -46,7 +49,6 @@ def parse_extracted_text(raw_text: str):
     elif any(k in lower for k in ["ticket", "no valido como factura", "resumen de compra"]):
         doc_type = "Ticket"
 
-    # 2. Número de Documento en formato paraguayo (ej: 001-001-0000001)
     doc_number = "S/N"
     nro_match = re.search(r"\b([0-9]{3}-[0-9]{3}-[0-9]{7})\b", raw_text)
     if nro_match:
@@ -56,11 +58,9 @@ def parse_extracted_text(raw_text: str):
         if alt_match:
             doc_number = alt_match.group(1)
 
-    # 3. Código CDC (Factura Electrónica Paraguay - 44 dígitos)
     cdc_match = re.search(r"(?:cdc|control)[\s\.:#-]*([0-9\s]{40,50})", raw_text, re.IGNORECASE)
     cdc_code = "".join(cdc_match.group(1).split()) if cdc_match else ""
 
-    # 4. Emisor / Comercio detectado
     business_name = "Comercio Emisor"
     known_brands = [
         ("arete", "Supermercado Arete"),
@@ -84,7 +84,6 @@ def parse_extracted_text(raw_text: str):
                 business_name = l[:30]
                 break
 
-    # 5. Detección de Monto Total
     amounts = []
     for line in lines:
         if any(k in line.lower() for k in ["total", "a pagar", "importe", "gs"]):
@@ -116,15 +115,8 @@ def parse_extracted_text(raw_text: str):
     else:
         gravada_10 = detected_amount if doc_type == "Factura" else 0.0
 
-    product_detail = f"{doc_type} - {business_name}"
-    for line in lines:
-        upper_line = line.upper()
-        if any(h in upper_line for h in ["CÓDIGO", "CÓD.", "UNID", "CANTIDAD", "PRECIO", "DESCUENTO"]):
-            continue
-        if any(w in upper_line for w in ["ARANCEL", "PAGO", "CUOTA", "MATRICULA", "SERVICIO", "MENSUALIDAD", "COMPRA", "PRODUCTO"]):
-            if len(line) > 3:
-                product_detail = line
-                break
+    # Marcar explícitamente en el concepto que viene del correo
+    product_detail = f"[Correo Gmail] {doc_type} - {business_name}"
 
     detected_date = datetime.today().strftime("%Y-%m-%d")
     date_match = re.search(r"\b(\d{1,2})[/\.-](\d{1,2})[/\.-](\d{2,4})\b", raw_text)
@@ -147,7 +139,7 @@ def parse_extracted_text(raw_text: str):
         "exenta": exenta,
         "businessName": business_name,
         "productDetail": product_detail,
-        "category": "Tecnología y Suscripciones" if "arancel" in product_detail.lower() else "Otros Gastos",
+        "category": "Otros Gastos",
         "date": detected_date,
     }
 
@@ -155,24 +147,72 @@ def parse_extracted_text(raw_text: str):
 async def process_document(file: UploadFile = File(...)):
     contents = await file.read()
     raw_text = ""
-    
     try:
-        # Extracción directa de texto mediante pdfplumber (sin requerir tesseract)
         with pdfplumber.open(io.BytesIO(contents)) as pdf:
             for page in pdf.pages:
                 t = page.extract_text()
                 if t: raw_text += t + "\n"
     except Exception as e:
-        print("Error procesando PDF:", e)
+        print("Error en PDF:", e)
 
     parsed = parse_extracted_text(raw_text)
-    parsed["images"] = [] # Sin imágenes intermedias pesadas
+    parsed["images"] = []
     return parsed
 
 @app.post("/sync-mail")
 async def sync_user_mail(payload: SyncMailRequest):
-    # Endpoint simplificado que responde de forma rápida y limpia
-    return {"success": True, "count": 0, "transactions": []}
+    found_transactions = []
+    try:
+        mail = imaplib.IMAP4_SSL("imap.gmail.com")
+        mail.login(payload.email.strip(), payload.password.strip())
+        mail.select("inbox")
+
+        # Configurar fechas de búsqueda (por días o rango personalizado)
+        if payload.startDate:
+            start_dt = datetime.strptime(payload.startDate, "%Y-%m-%d")
+        else:
+            start_dt = datetime.now() - timedelta(days=payload.days)
+
+        search_query = f'(SINCE "{to_imap_date(start_dt)}")'
+        status, messages = mail.search(None, search_query)
+        email_ids = messages[0].split()
+
+        # Revisar los últimos 30 correos coincidentes en la bandeja
+        for e_id in reversed(email_ids[-30:]):
+            status, msg_data = mail.fetch(e_id, "(RFC822)")
+            for response_part in msg_data:
+                if isinstance(response_part, tuple):
+                    msg = email.message_from_bytes(response_part[1])
+                    for part in msg.walk():
+                        filename = part.get_filename() or ""
+                        content_type = part.get_content_type()
+                        if ".pdf" in filename.lower() or "pdf" in content_type:
+                            file_bytes = part.get_payload(decode=True)
+                            if file_bytes:
+                                raw_text = ""
+                                try:
+                                    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                                        for p in pdf.pages:
+                                            t = p.extract_text()
+                                            if t: raw_text += t + "\n"
+                                except Exception as e:
+                                    print("Error leyendo PDF adjunto:", e)
+
+                                parsed = parse_extracted_text(raw_text)
+                                
+                                # Filtrar también por fecha fin si se especificó un rango personalizado
+                                if payload.endDate and parsed["date"] > payload.endDate:
+                                    continue
+
+                                if parsed.get("amount", 0) > 0:
+                                    found_transactions.append(parsed)
+
+        mail.close()
+        mail.logout()
+        return {"success": True, "count": len(found_transactions), "transactions": found_transactions}
+    except Exception as e:
+        print("Error en sync-mail:", e)
+        return {"success": False, "error": str(e), "transactions": []}
 
 if __name__ == "__main__":
     import uvicorn
