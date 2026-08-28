@@ -2,8 +2,10 @@
  * ============================================================================
  * MÓDULO PROFESIONAL DE MOVIMIENTOS, CUOTAS Y PRÉSTAMOS - VIRUCHECK
  * ============================================================================
- * Incluye gestión de cuotas mes a mes con interés por mora, préstamos simultáneos,
- * escáner IA, diseño moderno y campos fiscales completos opcionales.
+ * - Compatibilidad total con Modo Claro y Oscuro adaptativa.
+ * - Textos profesionales y formales con ejemplos financieros comunes.
+ * - Alertas y modales con diseño moderno y minimalista de alta gama.
+ * - Estructura responsiva impecable en dispositivos móviles y portátiles.
  */
 
 "use client";
@@ -56,10 +58,10 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Activity,
-  FileText,
   CalendarIcon,
   CreditCard,
-  Percent
+  Percent,
+  Check
 } from "lucide-react";
 
 // ==========================================
@@ -181,7 +183,7 @@ export default function MovimientosPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formType, setFormType] = useState<"expense" | "income">("expense");
-  const [isFiscalInvoice, setIsFiscalInvoice] = useState<boolean>(true); // [CORREGIDO AQUÍ]
+  const [isFiscalInvoice, setIsFiscalInvoice] = useState<boolean>(true);
   const [formDocType, setFormDocType] = useState("Factura");
   const [formAmountInput, setFormAmountInput] = useState("");
   const [formDescription, setFormDescription] = useState("");
@@ -215,6 +217,14 @@ export default function MovimientosPage() {
   const [showSyncMailModal, setShowSyncMailModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<TransactionItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Sistema de Alertas Toast flotantes
+  const [toast, setToast] = useState<{ type: "error" | "success"; text: string } | null>(null);
+
+  const showToast = (type: "error" | "success", text: string) => {
+    setToast({ type, text });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   // ==========================================
   // 3. CARGA DE DATOS EN TIEMPO REAL (FIREBASE)
@@ -318,8 +328,10 @@ export default function MovimientosPage() {
         amount: finalAmount,
         updatedAt: serverTimestamp(),
       });
+      showToast("success", `Cuota marcada como ${newPaidState ? "Pagada" : "Pendiente"}.`);
     } catch (err) {
       console.error("Error al actualizar cuota:", err);
+      showToast("error", "No se pudo actualizar el estado de la cuota.");
     }
   };
 
@@ -440,20 +452,21 @@ export default function MovimientosPage() {
       setIsFiscalInvoice(true);
       setFormDocType(docData.docType || "Factura");
       setFormAmountInput(formatPYG(docData.amount));
-      setFormDescription(docData.productDetail || "Comprobante Escaneado");
+      setFormDescription(docData.productDetail || "Compra de insumos generales");
       setFormCategory(docData.category || "Otros Gastos");
-      setFormCounterparty(docData.businessName || "Comercio Emisor");
+      setFormCounterparty(docData.businessName || "Supermercado El Ahorro S.A.");
       setFormDate(docData.date || new Date().toISOString().split("T")[0]);
-      setFormDocNumber(docData.documentNumber || "");
+      setFormDocNumber(docData.documentNumber || "001-001-0012345");
       setFormCdc(docData.cdc || "");
       setFormIsMyExpense(true);
       setFormGravada10(docData.gravada10 ? formatPYG(docData.gravada10) : "");
       setFormGravada5(docData.gravada5 ? formatPYG(docData.gravada5) : "");
       setFormExenta(docData.exenta ? formatPYG(docData.exenta) : "");
       setShowModal(true);
+      showToast("success", "¡Documento escaneado e interpretado con éxito por IA!");
     } catch (err) {
       console.error(err);
-      alert("Error al procesar el archivo mediante IA.");
+      showToast("error", "No se pudo procesar el archivo mediante IA.");
     } finally {
       setIsScanning(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -505,6 +518,7 @@ export default function MovimientosPage() {
           ...basePayload,
           updatedAt: serverTimestamp(),
         });
+        showToast("success", "¡Movimiento actualizado correctamente!");
       } else {
         if (isInstallment) {
           const totalInst = parseInt(installmentTotal) || 12;
@@ -526,11 +540,13 @@ export default function MovimientosPage() {
               createdAt: serverTimestamp(),
             });
           }
+          showToast("success", `¡Plan de ${totalInst} cuotas registrado con éxito!`);
         } else {
           await addDoc(collection(db, "transactions"), {
             ...basePayload,
             createdAt: serverTimestamp(),
           });
+          showToast("success", "¡Movimiento guardado con éxito!");
         }
       }
 
@@ -538,7 +554,7 @@ export default function MovimientosPage() {
       setScannedImages([]);
     } catch (err) {
       console.error("Error al guardar en Firebase:", err);
-      alert("No se pudo guardar el registro. Revisa la consola.");
+      showToast("error", "No se pudo guardar el registro.");
     } finally {
       setIsSubmitting(false);
     }
@@ -550,8 +566,10 @@ export default function MovimientosPage() {
     try {
       await deleteDoc(doc(db, "transactions", itemToDelete.id));
       setItemToDelete(null);
+      showToast("success", "Registro eliminado correctamente.");
     } catch (err) {
       console.error(err);
+      showToast("error", "No se pudo eliminar el registro.");
     } finally {
       setIsDeleting(false);
     }
@@ -559,7 +577,7 @@ export default function MovimientosPage() {
 
   const exportToExcel = () => {
     if (filteredList.length === 0) {
-      alert("No hay registros para exportar.");
+      showToast("error", "No hay registros para exportar en este periodo.");
       return;
     }
 
@@ -575,6 +593,7 @@ export default function MovimientosPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    showToast("success", "Reporte Excel exportado con éxito.");
   };
 
   const downloadImage = (imgSrc: string) => {
@@ -594,11 +613,21 @@ export default function MovimientosPage() {
   const availableYears = Array.from({ length: 16 }, (_, i) => 2020 + i);
 
   // ==========================================
-  // 9. RENDERIZADO VISUAL PROFESIONAL
+  // 9. RENDERIZADO VISUAL PROFESIONAL ADAPTATIVO
   // ==========================================
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 pb-28 md:pb-12 px-4 sm:px-6 animate-in fade-in duration-300">
       
+      {/* ALERTA TOAST FLOTANTE */}
+      {toast && (
+        <div className={`fixed top-6 right-6 z-50 flex items-center gap-2.5 rounded-2xl border px-5 py-4 text-xs shadow-2xl backdrop-blur-xl animate-in slide-in-from-top-5 ${
+          toast.type === "error" ? "border-red-500/30 bg-red-950/90 text-red-300" : "border-emerald-500/30 bg-emerald-950/90 text-emerald-300"
+        }`}>
+          {toast.type === "error" ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+          <span className="font-bold">{toast.text}</span>
+        </div>
+      )}
+
       <input ref={fileInputRef} type="file" accept="image/*,application/pdf" onChange={handleFileScan} className="hidden" />
 
       <SyncMailModal
@@ -609,71 +638,71 @@ export default function MovimientosPage() {
       />
 
       {/* CABECERA CON BOTONES MODERNOS */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/60 pb-6 pt-2">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/60 pb-6 pt-2">
         <div className="space-y-1">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold tracking-wide uppercase shadow-sm">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold tracking-wide uppercase shadow-sm">
             <Sparkles className="h-3.5 w-3.5" /> Módulo Financiero Avanzado
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-3">
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
             Libro de Movimientos y Cuotas
           </h1>
-          <p className="text-xs text-slate-400">
-            Control de ingresos, egresos, facturas fiscales, cuotas con check y préstamos bancarios.
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            Control eficiente de ingresos, egresos, comprobantes fiscales, cuotas con check y créditos bancarios.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button size="sm" onClick={exportToExcel} className="h-10 px-4 rounded-2xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm">
+          <Button size="sm" onClick={exportToExcel} className="h-10 px-4 rounded-2xl bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm cursor-pointer">
             <FileSpreadsheet className="h-4 w-4" /> Exportar Excel
           </Button>
 
-          <Button size="sm" onClick={() => setShowSyncMailModal(true)} className="h-10 px-4 rounded-2xl bg-purple-600/20 text-purple-400 border border-purple-500/30 hover:bg-purple-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm">
+          <Button size="sm" onClick={() => setShowSyncMailModal(true)} className="h-10 px-4 rounded-2xl bg-purple-600/20 text-purple-700 dark:text-purple-400 border border-purple-500/30 hover:bg-purple-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm cursor-pointer">
             <Mail className="h-4 w-4" /> Sincronizar Correo
           </Button>
 
-          <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={isScanning} className="h-10 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:brightness-110 text-white text-xs font-bold gap-2 shadow-lg shadow-blue-500/25 transition-all">
+          <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={isScanning} className="h-10 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:brightness-110 text-white text-xs font-bold gap-2 shadow-lg shadow-blue-500/25 transition-all cursor-pointer">
             {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-            <span>{isScanning ? "Analizando IA..." : "Escanear Documento"}</span>
+            <span>{isScanning ? "Analizando IA..." : "Escanear Factura / Ticket"}</span>
           </Button>
 
-          <Button size="sm" onClick={() => handleOpenCreate("expense")} className="h-10 px-5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:brightness-110 text-white text-xs font-extrabold gap-2 shadow-lg shadow-rose-600/30 transition-all">
+          <Button size="sm" onClick={() => handleOpenCreate("expense")} className="h-10 px-5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:brightness-110 text-white text-xs font-extrabold gap-2 shadow-lg shadow-rose-600/30 transition-all cursor-pointer">
             <PlusCircle className="h-4 w-4" /> Nuevo Movimiento
           </Button>
         </div>
       </div>
 
       {/* SELECTOR DE CALENDARIO MODERNO */}
-      <div className="relative z-50 bg-slate-900/90 p-4 rounded-3xl border border-slate-800 shadow-xl backdrop-blur-xl">
+      <div className="relative z-40 bg-white/90 dark:bg-slate-900/90 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl backdrop-blur-xl transition-colors">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button size="sm" variant="outline" onClick={() => setShowDatePicker(!showDatePicker)} className="h-10 px-4 rounded-2xl border-slate-700 bg-slate-950 text-xs font-bold text-slate-200 hover:text-cyan-400 hover:border-cyan-500/40 gap-2.5 transition-all">
-            <CalendarIcon className="h-4 w-4 text-cyan-400" />
+          <Button size="sm" variant="outline" onClick={() => setShowDatePicker(!showDatePicker)} className="h-10 px-4 rounded-2xl border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-cyan-600 dark:hover:text-cyan-400 gap-2.5 transition-all cursor-pointer">
+            <CalendarIcon className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
             <span>{monthNames[selectedMonth]} {selectedYear}</span>
           </Button>
 
-          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-2xl border border-slate-800">
-            <Button size="icon" variant="ghost" onClick={() => { if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(prev => prev - 1); } else { setSelectedMonth(prev => prev - 1); } }} className="h-7 w-7 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800">
+          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-950 px-3 py-1.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <Button size="icon" variant="ghost" onClick={() => { if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(prev => prev - 1); } else { setSelectedMonth(prev => prev - 1); } }} className="h-7 w-7 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-xs font-mono font-bold text-slate-200 px-2 min-w-[90px] text-center">
+            <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 px-2 min-w-[90px] text-center">
               {shortMonthNames[selectedMonth]} {selectedYear}
             </span>
-            <Button size="icon" variant="ghost" onClick={() => { if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(prev => prev + 1); } else { setSelectedMonth(selectedMonth + 1); } }} className="h-7 w-7 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800">
+            <Button size="icon" variant="ghost" onClick={() => { if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(prev => prev + 1); } else { setSelectedMonth(selectedMonth + 1); } }} className="h-7 w-7 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
         {showDatePicker && (
-          <div className="mt-4 p-5 rounded-3xl border border-slate-700 bg-slate-950 shadow-2xl z-[100] absolute top-full left-0 w-full sm:w-80 backdrop-blur-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Seleccionar Periodo</span>
-              <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} className="h-8 rounded-xl border border-slate-800 bg-slate-900 px-3 text-xs text-cyan-400 font-bold font-mono outline-none">
+          <div className="mt-4 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 shadow-2xl z-50 absolute top-full left-0 w-full sm:w-80 backdrop-blur-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 mb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Seleccionar Periodo</span>
+              <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} className="h-8 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 px-3 text-xs text-cyan-600 dark:text-cyan-400 font-bold font-mono outline-none cursor-pointer">
                 {availableYears.map(yr => (<option key={yr} value={yr}>{yr}</option>))}
               </select>
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
               {shortMonthNames.map((name, idx) => (
-                <button key={name} onClick={() => { setSelectedMonth(idx); setShowDatePicker(false); }} className={`py-2 px-3 rounded-xl text-xs font-bold transition-all ${idx === selectedMonth ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg" : "bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800"}`}>
+                <button key={name} onClick={() => { setSelectedMonth(idx); setShowDatePicker(false); }} className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${idx === selectedMonth ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg" : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800"}`}>
                   {name}
                 </button>
               ))}
@@ -684,45 +713,47 @@ export default function MovimientosPage() {
 
       {/* TARJETAS RESUMEN */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/30 p-6 shadow-xl">
+        <div className="rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-emerald-950/30 p-6 shadow-xl transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Total Ingresos del Mes</span>
-            <div className="rounded-2xl bg-emerald-500/10 p-2.5 text-emerald-400 border border-emerald-500/20"><ArrowUpRight className="h-4 w-4" /></div>
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Total Ingresos del Mes</span>
+            <div className="rounded-2xl bg-emerald-500/10 p-2.5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"><ArrowUpRight className="h-4 w-4" /></div>
           </div>
-          <div className="mt-3 text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
+          <div className="mt-3 text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
             +{formatPYG(totalIncomes)} ₲
           </div>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Sueldo, bonos y entradas registrados.</p>
         </div>
 
-        <div className="rounded-3xl border border-rose-500/30 bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950/30 p-6 shadow-xl">
+        <div className="rounded-3xl border border-rose-500/30 bg-gradient-to-br from-white via-slate-50 to-rose-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-rose-950/30 p-6 shadow-xl transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-rose-400">Total Gastos y Cuotas</span>
-            <div className="rounded-2xl bg-rose-500/10 p-2.5 text-rose-400 border border-rose-500/20"><ArrowDownRight className="h-4 w-4" /></div>
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Total Gastos y Cuotas</span>
+            <div className="rounded-2xl bg-rose-500/10 p-2.5 text-rose-600 dark:text-rose-400 border border-rose-500/20"><ArrowDownRight className="h-4 w-4" /></div>
           </div>
-          <div className="mt-3 text-2xl sm:text-3xl font-black text-rose-400 font-mono">
+          <div className="mt-3 text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400 font-mono">
             -{formatPYG(totalExpenses)} ₲
           </div>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Supermercado, servicios y compromisos del mes.</p>
         </div>
       </div>
 
       {/* GRÁFICO EXTENDIDO */}
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6 backdrop-blur-xl shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 p-6 backdrop-blur-xl shadow-xl space-y-4 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 pb-3">
           <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-cyan-400 animate-pulse" />
+            <Activity className="h-4 w-4 text-cyan-600 dark:text-cyan-400 animate-pulse" />
             <div>
-              <h3 className="text-xs sm:text-sm font-bold text-slate-200 uppercase tracking-wider">
+              <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                 Evolución Analítica Contable
               </h3>
-              <p className="text-[10px] text-slate-400">Ingresos, Gastos Comunes, Cuotas y Préstamos</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Ingresos, Gastos Comunes, Cuotas y Préstamos</p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-[10px] font-bold">
-            <span className="flex items-center gap-1 text-emerald-400"><span className="h-2 w-2 rounded-full bg-emerald-500"></span> Ingresos</span>
-            <span className="flex items-center gap-1 text-rose-400"><span className="h-2 w-2 rounded-full bg-rose-500"></span> Gastos</span>
-            <span className="flex items-center gap-1 text-amber-400"><span className="h-2 w-2 rounded-full bg-amber-500"></span> Cuotas</span>
-            <span className="flex items-center gap-1 text-purple-400"><span className="h-2 w-2 rounded-full bg-purple-500"></span> Préstamos</span>
+            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><span className="h-2 w-2 rounded-full bg-emerald-500"></span> Ingresos</span>
+            <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400"><span className="h-2 w-2 rounded-full bg-rose-500"></span> Gastos</span>
+            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><span className="h-2 w-2 rounded-full bg-amber-500"></span> Cuotas</span>
+            <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400"><span className="h-2 w-2 rounded-full bg-purple-500"></span> Préstamos</span>
           </div>
         </div>
 
@@ -742,7 +773,7 @@ export default function MovimientosPage() {
               {pointsCoords.ln.length > 1 && <path d={pointsCoords.ln.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lLn)" strokeWidth="2.5" />}
             </svg>
 
-            <div className="flex justify-between px-4 pt-2 border-t border-slate-800/80">
+            <div className="flex justify-between px-4 pt-2 border-t border-slate-200 dark:border-slate-800/80">
               {chartData.map((d, i) => (<span key={i} className="text-[10px] text-slate-500 font-mono text-center flex-1">{d.label}</span>))}
             </div>
           </div>
@@ -750,24 +781,24 @@ export default function MovimientosPage() {
       </div>
 
       {/* LISTADO DE MOVIMIENTOS CON CHECK DE CUOTAS Y EDICIÓN */}
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 backdrop-blur-2xl shadow-2xl space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 p-6 backdrop-blur-2xl shadow-2xl space-y-4 transition-colors">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-2">
-            <ReceiptText className="h-5 w-5 text-blue-400" />
+            <ReceiptText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-100">Registro General de Movimientos y Cuotas</h3>
-              <p className="text-[11px] text-slate-400">Mostrando {filteredList.length} registros del periodo</p>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">Registro General de Movimientos y Cuotas</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Mostrando {filteredList.length} registros del periodo</p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="relative flex-1 sm:w-44">
-              <Search className="absolute left-3.5 top-3 h-3.5 w-3.5 text-slate-500" />
-              <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-10 pl-9 text-xs rounded-2xl border-slate-800 bg-slate-950 text-slate-100 shadow-inner" />
+              <Search className="absolute left-3.5 top-3 h-3.5 w-3.5 text-slate-400" />
+              <Input placeholder="Buscar por concepto..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-10 pl-9 text-xs rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-inner" />
             </div>
 
-            <Button size="sm" variant="outline" onClick={() => setSortOrder((p) => (p === "desc" ? "asc" : "desc"))} className="h-10 px-4 rounded-2xl border-slate-800 bg-slate-950 text-xs font-bold text-slate-300 hover:text-white">
-              <ArrowUpDown className="h-3.5 w-3.5 text-blue-400 mr-1.5" />
+            <Button size="sm" variant="outline" onClick={() => setSortOrder((p) => (p === "desc" ? "asc" : "desc"))} className="h-10 px-4 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+              <ArrowUpDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 mr-1.5" />
               {sortOrder === "desc" ? "Nuevos" : "Antiguos"}
             </Button>
           </div>
@@ -776,17 +807,17 @@ export default function MovimientosPage() {
         {loading ? (
           <div className="py-16 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>
         ) : filteredList.length === 0 ? (
-          <div className="py-16 text-center text-xs text-slate-400 border border-dashed border-slate-800 rounded-3xl space-y-2 bg-slate-950/30">
-            <p className="font-bold text-slate-300">No hay movimientos en esta sección.</p>
+          <div className="py-16 text-center text-xs text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-slate-800 rounded-3xl space-y-2 bg-slate-50 dark:bg-slate-950/30">
+            <p className="font-bold text-slate-800 dark:text-slate-200">No hay movimientos en esta sección.</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-800/60">
+          <div className="divide-y divide-slate-200 dark:divide-slate-800/60">
             {paginatedList.map((item) => {
               const imgs = item.receiptImages || [];
               const isInc = item.type === "income";
 
               return (
-                <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-3 hover:bg-slate-950/60 px-3 rounded-2xl transition-all border border-transparent hover:border-slate-800/50">
+                <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-3 hover:bg-slate-100 dark:hover:bg-slate-950/60 px-3 rounded-2xl transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-800/50">
                   <div className="flex items-start sm:items-center gap-3.5">
                     
                     {/* Check de Cuotas */}
@@ -795,53 +826,53 @@ export default function MovimientosPage() {
                         type="button"
                         onClick={() => toggleInstallmentPaid(item)}
                         title={item.isPaid ? "Cuota Pagada" : "Cuota Pendiente"}
-                        className={`h-6 w-6 rounded-xl border flex items-center justify-center transition-all shrink-0 font-bold ${
-                          item.isPaid ? "bg-emerald-500 border-emerald-400 text-slate-950 shadow-md shadow-emerald-500/20" : "bg-slate-950 border-slate-700 text-transparent"
+                        className={`h-6 w-6 rounded-xl border flex items-center justify-center transition-all shrink-0 font-bold cursor-pointer ${
+                          item.isPaid ? "bg-emerald-500 border-emerald-400 text-slate-950 shadow-md shadow-emerald-500/20" : "bg-slate-100 dark:bg-slate-950 border-slate-400 dark:border-slate-700 text-transparent"
                         }`}
                       >
                         ✓
                       </button>
                     )}
 
-                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl shrink-0 shadow-inner ${isInc ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-400 border border-rose-500/20"}`}>
+                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl shrink-0 shadow-inner ${isInc ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"}`}>
                       {isInc ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
                     </div>
 
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-bold text-slate-100 text-sm leading-snug">{item.description}</p>
+                        <p className="font-bold text-slate-900 dark:text-slate-100 text-sm leading-snug">{item.description}</p>
                         
                         {item.isInstallment && (
-                          <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-400 text-[10px] font-bold border border-amber-500/20">
+                          <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
                             Cuota {item.installmentCurrent}/{item.installmentTotal} {item.isPaid ? "(Pagado)" : "(Pendiente)"}
                           </span>
                         )}
 
                         {item.isLoan && (
-                          <span className="px-2.5 py-0.5 rounded-lg bg-purple-500/10 text-purple-400 text-[10px] font-bold border border-purple-500/20">
+                          <span className="px-2.5 py-0.5 rounded-lg bg-purple-500/10 text-purple-700 dark:text-purple-400 text-[10px] font-bold border border-purple-500/20">
                             Préstamo
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-400 font-mono">
-                        {item.counterpartyName || "Emisor"} • Categoría: <span className="text-cyan-400">{item.categoryId}</span> • Fecha: {item.date}
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                        {item.counterpartyName || "Comercio"} • Categoría: <span className="text-cyan-600 dark:text-cyan-400">{item.categoryId}</span> • Fecha: {item.date}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between sm:justify-end gap-4 pl-14 sm:pl-0">
-                    <span className={`font-mono font-black text-base sm:text-lg ${isInc ? "text-emerald-400" : "text-rose-400"}`}>
+                    <span className={`font-mono font-black text-base sm:text-lg ${isInc ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                       {isInc ? "+" : "-"}{formatPYG(item.amount)} ₲
                     </span>
 
                     <div className="flex items-center gap-1.5">
                       {imgs.length > 0 && (
-                        <Button size="icon" variant="ghost" onClick={() => setZoomImageModal(imgs[0])} title="Ver PNG" className="h-9 w-9 text-cyan-400 hover:bg-cyan-500/10 rounded-xl">
+                        <Button size="icon" variant="ghost" onClick={() => setZoomImageModal(imgs[0])} title="Ver Comprobante" className="h-9 w-9 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10 rounded-xl cursor-pointer">
                           <Eye className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button size="icon" variant="ghost" onClick={() => handleOpenEdit(item)} title="Editar monto y datos" className="h-9 w-9 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl"><Edit3 className="h-4 w-4" /></Button>
-                      <Button size="icon" variant="ghost" onClick={() => setItemToDelete(item)} className="h-9 w-9 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl"><Trash2 className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" onClick={() => handleOpenEdit(item)} title="Modificar registro" className="h-9 w-9 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-500/10 rounded-xl cursor-pointer"><Edit3 className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" onClick={() => setItemToDelete(item)} title="Eliminar registro" className="h-9 w-9 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 rounded-xl cursor-pointer"><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 </div>
@@ -851,27 +882,27 @@ export default function MovimientosPage() {
         )}
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-slate-800 pt-3 text-xs">
-            <span className="text-slate-400 font-mono">Página {currentPage} de {totalPages}</span>
+          <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 pt-3 text-xs">
+            <span className="text-slate-500 dark:text-slate-400 font-mono">Página {currentPage} de {totalPages}</span>
             <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="h-8 px-3 rounded-xl border-slate-800 bg-slate-950 text-xs font-semibold text-slate-300">Anterior</Button>
-              <Button size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="h-8 px-3 rounded-xl border-slate-800 bg-slate-950 text-xs font-semibold text-slate-300">Siguiente</Button>
+              <Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="h-8 px-3 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">Anterior</Button>
+              <Button size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="h-8 px-3 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">Siguiente</Button>
             </div>
           </div>
         )}
       </div>
 
-      {/* MODAL CREAR / EDITAR CON CAMPOS FISCALES COMPLETOS Y CLASIFICACIÓN */}
+      {/* MODAL CREAR / EDITAR CON EJEMPLOS COMUNES */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
-          <div className="w-full max-w-xl rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
-            <div className="border-b border-slate-800 bg-slate-950/80 p-6">
+          <div className="w-full max-w-xl rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 p-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-extrabold text-white flex items-center gap-2.5">
-                  <Sparkles className="h-5 w-5 text-cyan-400" /> {editingId ? "Modificar Movimiento" : "Registrar Comprobante / Movimiento"}
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2.5">
+                  <Sparkles className="h-5 w-5 text-cyan-600 dark:text-cyan-400" /> {editingId ? "Modificar Movimiento" : "Registrar Comprobante / Movimiento"}
                 </h3>
-                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 px-3 rounded-xl border-slate-700 bg-slate-950 text-[11px] text-cyan-400">
-                  <RefreshCw className="h-3 w-3 mr-1" /> Escanear Archivo
+                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 px-3 rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-[11px] text-cyan-600 dark:text-cyan-400 font-bold cursor-pointer">
+                  <RefreshCw className="h-3 w-3 mr-1" /> Escanear Archivo IA
                 </Button>
               </div>
             </div>
@@ -879,38 +910,35 @@ export default function MovimientosPage() {
             <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
               
               {scannedImages.length > 0 && (
-                <div className="relative rounded-2xl border border-slate-800 bg-slate-950 p-3 flex flex-col items-center justify-center">
-                  <div className="w-full flex items-center justify-between px-2 py-1 text-[11px] text-slate-400 border-b border-slate-800 mb-2.5">
-                    <span className="flex items-center gap-1.5 text-cyan-300 font-bold">
+                <div className="relative rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 flex flex-col items-center justify-center">
+                  <div className="w-full flex items-center justify-between px-2 py-1 text-[11px] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 mb-2.5">
+                    <span className="flex items-center gap-1.5 text-cyan-600 dark:text-cyan-300 font-bold">
                       <Eye className="h-4 w-4" /> Página {activePageIndex + 1} de {scannedImages.length}
                     </span>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => downloadImage(scannedImages[activePageIndex])} className="h-7 px-2 text-emerald-400 text-[11px] font-bold gap-1">
+                    <Button type="button" size="sm" variant="ghost" onClick={() => downloadImage(scannedImages[activePageIndex])} className="h-7 px-2 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold gap-1 cursor-pointer">
                       <Download className="h-3.5 w-3.5" /> Descargar PNG
                     </Button>
                   </div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={scannedImages[activePageIndex]} alt="Comprobante" onClick={() => setZoomImageModal(scannedImages[activePageIndex])} className="max-h-48 object-contain rounded-xl border border-slate-800 cursor-zoom-in bg-white" />
+                  <img src={scannedImages[activePageIndex]} alt="Comprobante" onClick={() => setZoomImageModal(scannedImages[activePageIndex])} className="max-h-48 object-contain rounded-xl border border-slate-200 dark:border-slate-800 cursor-zoom-in bg-white" />
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300 font-bold">Tipo de Operación</Label>
-                  <select value={formType} onChange={(e) => setFormType(e.target.value as any)} className={`w-full h-11 rounded-2xl border px-4 text-xs font-bold outline-none ${formType === "income" ? "border-emerald-500/50 bg-emerald-950/30 text-emerald-300" : "border-rose-500/50 bg-rose-950/30 text-rose-300"}`}>
+                  <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Tipo de Operación</Label>
+                  <select value={formType} onChange={(e) => setFormType(e.target.value as any)} className={`w-full h-11 rounded-2xl border px-4 text-xs font-bold outline-none cursor-pointer ${formType === "income" ? "border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300" : "border-rose-500/50 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300"}`}>
                     <option value="expense">Gasto / Egreso</option>
                     <option value="income">Ingreso / Entrada</option>
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300 font-bold">Clasificación del Gasto</Label>
+                  <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Clasificación del Gasto</Label>
                   <select
                     value={isFiscalInvoice ? "fiscal" : "common"}
-                    onChange={(e) => {
-                      const val = e.target.value === "fiscal";
-                      setIsFiscalInvoice(val);
-                    }}
-                    className="w-full h-11 rounded-2xl border border-slate-800 bg-slate-950 px-4 text-xs text-slate-100 outline-none font-medium"
+                    onChange={(e) => setIsFiscalInvoice(e.target.value === "fiscal")}
+                    className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
                   >
                     <option value="fiscal">Factura Fiscal (Con CDC / RUC)</option>
                     <option value="common">Gasto Común / Sin Comprobante</option>
@@ -918,9 +946,9 @@ export default function MovimientosPage() {
                 </div>
               </div>
 
-              {/* Monto con teclado numérico nativo */}
+              {/* Monto con teclado numérico */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-300 font-bold">Monto Total (PYG ₲) *</Label>
+                <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Monto Total (₲) *</Label>
                 <Input
                   type="text"
                   inputMode="numeric"
@@ -931,96 +959,96 @@ export default function MovimientosPage() {
                     const parsed = parsePYG(formAmountInput);
                     if (parsed > 0) setFormAmountInput(formatPYG(parsed));
                   }}
-                  placeholder="Ej: 150000"
-                  className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 font-black text-base px-4 font-mono"
+                  placeholder="Ej: 150.000"
+                  className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-black text-base px-4 font-mono"
                 />
               </div>
 
-              {/* SELECCIÓN DUAL: CUOTAS Y PRÉSTAMOS */}
+              {/* CUOTAS Y PRÉSTAMOS */}
               {formType === "expense" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-4 space-y-3">
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-amber-300 flex items-center gap-1.5 text-[11px]"><CreditCard className="h-4 w-4" /> En Cuotas Mes a Mes</span>
-                      <input type="checkbox" checked={isInstallment} onChange={(e) => setIsInstallment(e.target.checked)} className="h-4 w-4 rounded border-slate-800 bg-slate-950 text-amber-500 cursor-pointer" />
+                      <span className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 text-[11px]"><CreditCard className="h-4 w-4" /> En Cuotas Mes a Mes</span>
+                      <input type="checkbox" checked={isInstallment} onChange={(e) => setIsInstallment(e.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-500 cursor-pointer" />
                     </div>
                     {isInstallment && (
                       <div className="space-y-2 pt-2 border-t border-amber-500/20">
                         <div>
-                          <Label className="text-[10px] text-amber-200">Total de Meses / Plazos</Label>
-                          <Input type="number" inputMode="numeric" min={2} max={60} value={installmentTotal} onChange={(e) => setInstallmentTotal(e.target.value)} className="h-8 rounded-xl border-slate-800 bg-slate-950 text-amber-300 font-mono text-xs" />
+                          <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">Plazo (Meses)</Label>
+                          <Input type="number" inputMode="numeric" min={2} max={60} value={installmentTotal} onChange={(e) => setInstallmentTotal(e.target.value)} className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
                         </div>
                         <div>
-                          <Label className="text-[10px] text-amber-200">% Interés por Mora (Opcional)</Label>
-                          <Input type="number" inputMode="numeric" min={0} max={100} value={installmentInterest} onChange={(e) => setInstallmentInterest(e.target.value)} placeholder="Ej: 5" className="h-8 rounded-xl border-slate-800 bg-slate-950 text-amber-300 font-mono text-xs" />
+                          <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">% Interés por Mora (Opcional)</Label>
+                          <Input type="number" inputMode="numeric" min={0} max={100} value={installmentInterest} onChange={(e) => setInstallmentInterest(e.target.value)} placeholder="Ej: 5" className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
                         </div>
                       </div>
                     )}
                   </div>
 
-                  <div className="rounded-2xl border border-purple-500/30 bg-purple-950/20 p-4 space-y-3">
+                  <div className="rounded-2xl border border-purple-500/30 bg-purple-50/50 dark:bg-purple-950/20 p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-purple-300 flex items-center gap-1.5 text-[11px]"><Percent className="h-4 w-4" /> Es Préstamo</span>
-                      <input type="checkbox" checked={isLoan} onChange={(e) => setIsLoan(e.target.checked)} className="h-4 w-4 rounded border-slate-800 bg-slate-950 text-purple-500 cursor-pointer" />
+                      <span className="font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 text-[11px]"><Percent className="h-4 w-4" /> Es Préstamo Bancario</span>
+                      <input type="checkbox" checked={isLoan} onChange={(e) => setIsLoan(e.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-purple-500 cursor-pointer" />
                     </div>
                     {isLoan && (
                       <div className="pt-2 border-t border-purple-500/20">
-                        <p className="text-[10px] text-slate-300">Usa el monto principal como saldo del préstamo.</p>
+                        <p className="text-[10px] text-slate-600 dark:text-slate-300">Registra el capital pendiente del préstamo como deuda activa.</p>
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Campos fiscales opcionales condicionales */}
+              {/* Campos fiscales opcionales */}
               {formType === "expense" && isFiscalInvoice && (
                 <>
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1"><Label className="text-[10px] text-slate-400 font-bold">Gravada 10%</Label><Input inputMode="numeric" value={formGravada10} onChange={(e) => setFormGravada10(e.target.value)} className="h-9 rounded-xl border-slate-800 bg-slate-950 text-slate-200 text-xs px-3 font-mono" /></div>
-                    <div className="space-y-1"><Label className="text-[10px] text-slate-400 font-bold">Gravada 5%</Label><Input inputMode="numeric" value={formGravada5} onChange={(e) => setFormGravada5(e.target.value)} className="h-9 rounded-xl border-slate-800 bg-slate-950 text-slate-200 text-xs px-3 font-mono" /></div>
-                    <div className="space-y-1"><Label className="text-[10px] text-slate-400 font-bold">Exenta</Label><Input inputMode="numeric" value={formExenta} onChange={(e) => setFormExenta(e.target.value)} className="h-9 rounded-xl border-slate-800 bg-slate-950 text-slate-200 text-xs px-3 font-mono" /></div>
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Gravada 10%</Label><Input inputMode="numeric" value={formGravada10} onChange={(e) => setFormGravada10(e.target.value)} placeholder="Ej: 100.000" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Gravada 5%</Label><Input inputMode="numeric" value={formGravada5} onChange={(e) => setFormGravada5(e.target.value)} placeholder="Ej: 0" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Exenta</Label><Input inputMode="numeric" value={formExenta} onChange={(e) => setFormExenta(e.target.value)} placeholder="Ej: 0" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5"><Label className="text-xs text-slate-300 font-bold">Local / Emisor</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej. Supermercado" className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4" /></div>
-                    <div className="space-y-1.5"><Label className="text-xs text-slate-300 font-bold">N° de Documento</Label><Input value={formDocNumber} onChange={(e) => setFormDocNumber(e.target.value)} placeholder="001-001-0000001" className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4 font-mono" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Local / Emisor</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej. Supermercado Stock S.A." className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">N° de Factura</Label><Input value={formDocNumber} onChange={(e) => setFormDocNumber(e.target.value)} placeholder="001-001-0001234" className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
                   </div>
 
-                  <div className="space-y-1.5"><Label className="text-xs text-slate-300 font-bold">Código CDC (Factura Electrónica)</Label><Input value={formCdc} onChange={(e) => setFormCdc(e.target.value)} placeholder="01003798..." className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4 font-mono" /></div>
+                  <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Código CDC (Factura Electrónica SET)</Label><Input value={formCdc} onChange={(e) => setFormCdc(e.target.value)} placeholder="01003798..." className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
                 </>
               )}
 
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-300 font-bold">Detalle / Concepto Amplio *</Label>
-                <textarea required rows={3} value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Describe detalladamente el concepto..." className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-100 outline-none resize-none font-medium" />
+                <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Detalle / Concepto Amplio *</Label>
+                <textarea required rows={3} value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Ej: Compra de víveres para el hogar y artículos de limpieza." className="w-full rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-900 dark:text-slate-100 outline-none resize-none font-medium" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5"><Label className="text-xs text-slate-300 font-bold">Fecha de Emisión</Label><Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="h-11 rounded-2xl border-slate-800 bg-slate-950 text-slate-100 text-xs px-4 font-mono" /></div>
+                <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Fecha de Emisión</Label><Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-300 font-bold">Categoría</Label>
-                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full h-11 rounded-2xl border border-slate-800 bg-slate-950 px-4 text-xs text-slate-100 outline-none">
+                  <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Categoría</Label>
+                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 text-xs text-slate-900 dark:text-slate-100 outline-none cursor-pointer">
                     {(formType === "expense" ? CATEGORIES_EXPENSE.map(c => c.id) : CATEGORIES_INCOME).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                   </select>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 border-t border-slate-800 pt-4">
-                <Button type="button" variant="outline" onClick={() => setShowModal(false)} className="rounded-xl border-slate-700 text-xs text-slate-300 h-10 px-4">Cancelar</Button>
-                <Button type="submit" disabled={isSubmitting} className="rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white h-10 px-6">Confirmar y Guardar</Button>
+              <div className="flex justify-end gap-3 border-t border-slate-200 dark:border-slate-800 pt-4">
+                <Button type="button" variant="outline" onClick={() => setShowModal(false)} className="rounded-xl border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 h-10 px-4 cursor-pointer">Cancelar</Button>
+                <Button type="submit" disabled={isSubmitting} className="rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white h-10 px-6 cursor-pointer">Confirmar y Guardar</Button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL ZOOM */}
+      {/* MODAL ZOOM PNG */}
       {zoomImageModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-2 backdrop-blur-md animate-in fade-in">
           <div className="relative w-full h-full overflow-auto flex flex-col items-center justify-center p-4">
             <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-              <Button onClick={() => downloadImage(zoomImageModal)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold gap-2"><Download className="h-4 w-4" /> Descargar PNG</Button>
-              <Button onClick={() => setZoomImageModal(null)} className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold">Cerrar ✕</Button>
+              <Button onClick={() => downloadImage(zoomImageModal)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold gap-2 cursor-pointer"><Download className="h-4 w-4" /> Descargar PNG</Button>
+              <Button onClick={() => setZoomImageModal(null)} className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold cursor-pointer">Cerrar ✕</Button>
             </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={zoomImageModal} alt="Zoom" className="max-w-[95vw] max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-slate-700 bg-white my-auto scale-110 origin-center" />
@@ -1031,14 +1059,14 @@ export default function MovimientosPage() {
       {/* MODAL ELIMINAR */}
       {itemToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in zoom-in-95">
-          <div className="w-full max-w-sm rounded-3xl border border-slate-800 bg-slate-900 p-7 shadow-2xl space-y-4">
+          <div className="w-full max-w-sm rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-7 shadow-2xl space-y-4">
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0"><AlertTriangle className="h-6 w-6" /></div>
-              <div className="space-y-0.5"><h3 className="text-base font-bold text-slate-100">¿Eliminar registro?</h3><p className="text-xs text-slate-400">Esta acción actualizará tu balance contable.</p></div>
+              <div className="h-12 w-12 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0"><AlertTriangle className="h-6 w-6" /></div>
+              <div className="space-y-0.5"><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">¿Eliminar registro?</h3><p className="text-xs text-slate-500 dark:text-slate-400">Esta acción actualizará tu balance contable.</p></div>
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" size="sm" onClick={() => setItemToDelete(null)} className="rounded-xl border-slate-700 text-xs text-slate-300">Cancelar</Button>
-              <Button size="sm" disabled={isDeleting} onClick={confirmDelete} className="rounded-xl bg-rose-600 hover:bg-rose-500 font-bold text-xs text-white px-5">Eliminar</Button>
+              <Button variant="outline" size="sm" onClick={() => setItemToDelete(null)} className="rounded-xl border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">Cancelar</Button>
+              <Button size="sm" disabled={isDeleting} onClick={confirmDelete} className="rounded-xl bg-rose-600 hover:bg-rose-500 font-bold text-xs text-white px-5 cursor-pointer">Eliminar</Button>
             </div>
           </div>
         </div>

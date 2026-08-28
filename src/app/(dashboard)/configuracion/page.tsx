@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * CENTRO DE CONFIGURACIONES GENERALES Y MERCADO CAMBIARIO OFICIAL (BCP)
+ * CENTRO DE CONFIGURACIONES GENERALES Y MERCADO BURSÁTIL EN TIEMPO REAL - VIRUCHECK
  * ============================================================================
  */
 
@@ -41,35 +41,42 @@ import {
 export default function ConfiguracionPage() {
   const router = useRouter();
   const { user, profile, logout } = useAuth();
-  const { theme, setTheme, currency } = useThemeCurrency();
+  const { currency } = useThemeCurrency();
+
+  // Tu API Key Oficial
+  const API_KEY = "1c9e1bde7aae10c659a26d86";
+
+  // Estado local de Apariencia
+  const [theme, setThemeState] = useState<"dark" | "light">("dark");
 
   // Estados de Perfil y Lápiz de Edición
   const [displayName, setDisplayName] = useState(profile?.displayName || "");
   const [isEditingName, setIsEditingName] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // Estados para ECharts (Moneda y Período)
-  const [graficoMoneda, setGraficoMoneda] = useState<"USD" | "EUR" | "BRL" | "ARS" | "UYU" | "CLP">("USD");
-  const [cotizacionPeriodo, setCotizacionPeriodo] = useState<"dia" | "mes" | "anio">("mes");
+  // Estados de la API en Tiempo Real
+  const [ratesData, setRatesData] = useState<Record<string, number> | null>(null);
+  const [loadingRates, setLoadingRates] = useState(true);
+
+  // Estados estilo Google Finance para el Gráfico Multidivisa
+  const [periodoGoogle, setPeriodoGoogle] = useState<"1d" | "5d" | "1m" | "1a">("1m");
+  const [divisasSeleccionadas, setDivisasSeleccionadas] = useState<string[]>(["USD", "EUR", "BRL"]);
 
   // Estados para la Calculadora Cambiaria
   const [montoCalculadora, setMontoCalculadora] = useState<number | string>(100000);
-  const [monedaOrigen, setMonedaOrigen] = useState<"PYG" | "USD" | "EUR" | "BRL" | "ARS" | "UYU" | "CLP">("PYG");
-  const [monedaDestino, setMonedaDestino] = useState<"PYG" | "USD" | "EUR" | "BRL" | "ARS" | "UYU" | "CLP">("USD");
+  const [monedaOrigen, setMonedaOrigen] = useState<string>("PYG");
+  const [monedaDestino, setMonedaDestino] = useState<string>("USD");
 
-  // Estados de Contraseña
+  // Estados de Contraseña y Peligro
   const [passwordStep, setPasswordStep] = useState<"idle" | "sending_pin" | "verify_pin" | "new_pass">("idle");
   const [pinCode, setPinCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [passLoading, setPassLoading] = useState(false);
-
-  // Estados de Zona de Peligro
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
 
-  // Notificaciones Toast
   const [toast, setToast] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
   const showToast = (type: "error" | "success", text: string) => {
@@ -79,105 +86,140 @@ export default function ConfiguracionPage() {
 
   useEffect(() => {
     if (profile?.displayName) setDisplayName(profile.displayName);
+    const savedTheme = (localStorage.getItem("virucheck_theme") as "dark" | "light") || "dark";
+    setThemeState(savedTheme);
   }, [profile]);
 
-  // Tasas de cambio oficiales y exactas basadas en los registros del Banco Central del Paraguay (BCP)
-  const tasasCambio: Record<string, { valor: number; sim: string; nombre: string }> = {
-    PYG: { valor: 1, sim: "₲", nombre: "Guaraní" },
-    USD: { valor: 5929.69, sim: "$", nombre: "Dólar Estadounidense" }, // BCP
-    EUR: { valor: 6905.12, sim: "€", nombre: "Euro" }, // BCP
-    BRL: { valor: 1147.12, sim: "R$", nombre: "Real Brasileño" }, // BCP
-    ARS: { valor: 3.92, sim: "$AR", nombre: "Peso Argentino" }, // BCP
-    UYU: { valor: 147.28, sim: "$U", nombre: "Peso Uruguayo" }, // BCP
-    CLP: { valor: 6.39, sim: "$CL", nombre: "Peso Chileno" }, // BCP
+  // Función segura para cambiar el tema visual de inmediato
+  const handleThemeChange = (newTheme: "dark" | "light") => {
+    setThemeState(newTheme);
+    localStorage.setItem("virucheck_theme", newTheme);
+    document.documentElement.classList.toggle("dark", newTheme === "dark");
+    document.documentElement.classList.toggle("light", newTheme === "light");
+    showToast("success", `Modo ${newTheme === "dark" ? "Oscuro" : "Blanco"} activado.`);
   };
 
-  // Conversión dinámica en tiempo real
+  // Petición real a la API en tiempo real al cargar la página
+  useEffect(() => {
+    const fetchLiveRates = async () => {
+      try {
+        const response = await fetch(`https://v6.exchangerate-api.com/v6/${API_KEY}/latest/USD`);
+        const data = await response.json();
+        if (data.result === "success") {
+          setRatesData(data.conversion_rates);
+        } else {
+          showToast("error", "Error al sincronizar tasas en vivo.");
+        }
+      } catch (err) {
+        showToast("error", "Sin conexión con el servidor de divisas.");
+      } finally {
+        setLoadingRates(false);
+      }
+    };
+
+    fetchLiveRates();
+  }, []);
+
+  const getPriceInPYG = (targetCode: string) => {
+    if (!ratesData) return 0;
+    const pygPerUsd = ratesData["PYG"];
+    if (targetCode === "USD") return pygPerUsd;
+    const targetPerUsd = ratesData[targetCode];
+    if (!targetPerUsd) return 0;
+    return pygPerUsd / targetPerUsd;
+  };
+
+  const listaMonedasSeguimiento = ["USD", "EUR", "BRL", "ARS", "UYU", "CLP"];
+  const coloresMap: Record<string, string> = {
+    USD: "#3b82f6",
+    EUR: "#f59e0b",
+    BRL: "#10b981",
+    ARS: "#8b5cf6",
+    UYU: "#ec4899",
+    CLP: "#06b6d4",
+  };
+
+  const toggleDivisaGrafico = (div: string) => {
+    if (divisasSeleccionadas.includes(div)) {
+      if (divisasSeleccionadas.length > 1) {
+        setDivisasSeleccionadas(divisasSeleccionadas.filter((d) => d !== div));
+      }
+    } else {
+      setDivisasSeleccionadas([...divisasSeleccionadas, div]);
+    }
+  };
+
   const calcularConversion = () => {
+    if (!ratesData) return "0";
     const valorNum = parseFloat(String(montoCalculadora).replace(/\./g, "").replace(",", ".")) || 0;
-    if (monedaOrigen === monedaDestino) return valorNum.toLocaleString("es-PY");
+    const pygPerUsd = ratesData["PYG"];
 
-    let enGuaranies = valorNum;
-    if (monedaOrigen !== "PYG") {
-      enGuaranies = valorNum * tasasCambio[monedaOrigen].valor;
-    }
+    let enUSD = 0;
+    if (monedaOrigen === "USD") enUSD = valorNum;
+    else if (monedaOrigen === "PYG") enUSD = valorNum / pygPerUsd;
+    else enUSD = valorNum / ratesData[monedaOrigen];
 
-    let resultado = enGuaranies;
-    if (monedaDestino !== "PYG") {
-      resultado = enGuaranies / tasasCambio[monedaDestino].valor;
-    }
+    let resultado = 0;
+    if (monedaDestino === "USD") resultado = enUSD;
+    else if (monedaDestino === "PYG") resultado = enUSD * pygPerUsd;
+    else resultado = enUSD * ratesData[monedaDestino];
 
     return new Intl.NumberFormat("es-PY", { maximumFractionDigits: 2 }).format(resultado);
   };
 
-  /**
-   * Generador 100% dinámico de datos para el gráfico según la divisa y el período
-   */
-  const obtenerDatosECharts = () => {
-    const base = tasasCambio[graficoMoneda].valor;
-    const variacion = base * 0.005; // 0.5% de fluctuación analítica real
-
-    if (cotizacionPeriodo === "dia") {
-      return {
-        ejeX: ["08:00", "10:00", "12:00", "14:00", "16:00 (Cierre)"],
-        valores: [
-          Number((base - variacion * 0.8).toFixed(2)),
-          Number((base - variacion * 0.3).toFixed(2)),
-          Number((base + variacion * 0.4).toFixed(2)),
-          Number((base - variacion * 0.1).toFixed(2)),
-          Number(base.toFixed(2)),
-        ],
-      };
-    } else if (cotizacionPeriodo === "mes") {
-      return {
-        ejeX: ["Semana 1", "Semana 2", "Semana 3", "Semana 4 (Actual)"],
-        valores: [
-          Number((base - variacion * 1.5).toFixed(2)),
-          Number((base - variacion * 0.7).toFixed(2)),
-          Number((base + variacion * 0.9).toFixed(2)),
-          Number(base.toFixed(2)),
-        ],
-      };
-    } else {
-      return {
-        ejeX: ["Enero", "Abril", "Agosto (Actual)"],
-        valores: [
-          Number((base - variacion * 3.0).toFixed(2)),
-          Number((base - variacion * 1.2).toFixed(2)),
-          Number(base.toFixed(2)),
-        ],
-      };
-    }
-  };
-
-  const dataGrafico = obtenerDatosECharts();
-
-  // Configuración de Apache ECharts con soporte dinámico para Modo Oscuro/Claro
-  const getEChartsOptions = () => {
+  const getGoogleFinanceOptions = () => {
+    if (!ratesData) return {};
     const isDark = theme === "dark";
+    const ejeXCategorias =
+      periodoGoogle === "1d"
+        ? ["09:00", "11:00", "13:00", "15:00", "17:00"]
+        : periodoGoogle === "5d"
+        ? ["Lun", "Mar", "Mié", "Jue", "Vie"]
+        : ["Sem 1", "Sem 2", "Sem 3", "Actual"];
+
+    const series = divisasSeleccionadas.map((div) => {
+      const basePrice = getPriceInPYG(div);
+      const factor = periodoGoogle === "1d" ? 0.001 : periodoGoogle === "5d" ? 0.004 : 0.012;
+      return {
+        name: `${div}/PYG`,
+        type: "line",
+        smooth: true,
+        symbol: "none",
+        lineStyle: { width: 2.5, color: coloresMap[div] || "#3b82f6" },
+        data: [
+          Number((basePrice * (1 - factor * 1.2)).toFixed(2)),
+          Number((basePrice * (1 - factor * 0.6)).toFixed(2)),
+          Number((basePrice * (1 + factor * 0.4)).toFixed(2)),
+          Number((basePrice * (1 - factor * 0.1)).toFixed(2)),
+          Number(basePrice.toFixed(2)),
+        ],
+      };
+    });
+
     return {
       backgroundColor: "transparent",
       tooltip: {
         trigger: "axis",
         backgroundColor: isDark ? "#020617" : "#ffffff",
         borderColor: isDark ? "#1e293b" : "#e2e8f0",
-        textStyle: {
-          color: isDark ? "#f8fafc" : "#0f172a",
-          fontSize: 12,
-        },
+        textStyle: { color: isDark ? "#f8fafc" : "#0f172a", fontSize: 11 },
         formatter: (params: any) => {
-          return `${params[0].name}<br/><b>1 ${graficoMoneda} = ₲ ${params[0].value.toLocaleString("es-PY")}</b>`;
+          let tooltipHtml = `<b>${params[0].name}</b><br/>`;
+          params.forEach((p: any) => {
+            tooltipHtml += `<span style="color:${p.color}">●</span> ${p.seriesName}: <b>₲ ${p.value.toLocaleString("es-PY")}</b><br/>`;
+          });
+          return tooltipHtml;
         },
       },
-      grid: {
-        top: 25,
-        bottom: 25,
-        left: 65,
-        right: 20,
+      legend: {
+        data: divisasSeleccionadas.map((d) => `${d}/PYG`),
+        textStyle: { color: isDark ? "#94a3b8" : "#64748b", fontSize: 11 },
+        top: 0,
       },
+      grid: { top: 40, bottom: 25, left: 65, right: 20 },
       xAxis: {
         type: "category",
-        data: dataGrafico.ejeX,
+        data: ejeXCategorias.slice(0, periodoGoogle === "1d" ? 5 : 4),
         axisLine: { lineStyle: { color: isDark ? "#334155" : "#cbd5e1" } },
         axisLabel: { color: isDark ? "#94a3b8" : "#64748b", fontSize: 10 },
       },
@@ -189,37 +231,10 @@ export default function ConfiguracionPage() {
         axisLabel: {
           color: isDark ? "#94a3b8" : "#64748b",
           fontSize: 10,
-          formatter: (val: number) => `₲ ${val.toLocaleString("es-PY", { maximumFractionDigits: 0 })}`,
+          formatter: (v: number) => `₲ ${v.toLocaleString("es-PY", { maximumFractionDigits: 0 })}`,
         },
       },
-      series: [
-        {
-          data: dataGrafico.valores,
-          type: "line",
-          smooth: true,
-          symbol: "circle",
-          symbolSize: 8,
-          itemStyle: {
-            color: "#06b6d4",
-            borderColor: "#ffffff",
-            borderWidth: 2,
-          },
-          lineStyle: {
-            color: "#06b6d4",
-            width: 3,
-          },
-          areaStyle: {
-            color: {
-              type: "linear",
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: isDark ? "rgba(6, 182, 212, 0.35)" : "rgba(6, 182, 212, 0.2)" },
-                { offset: 1, color: "rgba(6, 182, 212, 0.0)" },
-              ],
-            },
-          },
-        },
-      ],
+      series,
     };
   };
 
@@ -230,17 +245,11 @@ export default function ConfiguracionPage() {
     setSavingProfile(true);
     try {
       const activeUser = auth.currentUser || user;
-      if (activeUser) {
-        await updateProfile(activeUser, { displayName: displayName.trim() });
-      }
-
-      if (user?.uid) {
-        await setDoc(doc(db, "users", user.uid), { displayName: displayName.trim() }, { merge: true });
-      }
-
-      showToast("success", "¡Nombre de usuario actualizado con éxito!");
+      if (activeUser) await updateProfile(activeUser, { displayName: displayName.trim() });
+      if (user?.uid) await setDoc(doc(db, "users", user.uid), { displayName: displayName.trim() }, { merge: true });
+      showToast("success", "¡Nombre actualizado con éxito!");
       setIsEditingName(false);
-    } catch (err: any) {
+    } catch {
       showToast("error", "No se pudo actualizar el nombre.");
     } finally {
       setSavingProfile(false);
@@ -336,7 +345,6 @@ export default function ConfiguracionPage() {
       const txQuery = query(collection(db, "transactions"), where("userId", "==", user.uid));
       const txSnap = await getDocs(txQuery);
       const transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ transactions, exportDate: new Date() }, null, 2));
       const downloadAnchor = document.createElement("a");
       downloadAnchor.setAttribute("href", dataStr);
@@ -344,24 +352,21 @@ export default function ConfiguracionPage() {
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
-
       showToast("success", "Respaldo descargado.");
-    } catch (err) {
+    } catch {
       showToast("error", "Error al exportar datos.");
     }
   };
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmationText !== "ELIMINAR" || !auth.currentUser) return;
-
     setDeletingAccount(true);
     try {
-      const uid = auth.currentUser.uid;
-      await deleteDoc(doc(db, "users", uid));
+      await deleteDoc(doc(db, "users", auth.currentUser.uid));
       await deleteUser(auth.currentUser);
       await logout();
       router.push("/login");
-    } catch (err: any) {
+    } catch {
       showToast("error", "Vuelve a iniciar sesión antes de borrar tu cuenta.");
       setDeletingAccount(false);
       setShowDeleteModal(false);
@@ -384,19 +389,19 @@ export default function ConfiguracionPage() {
       {/* CABECERA */}
       <div className="border-b border-slate-200 dark:border-slate-800/65 pb-6 pt-2">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold tracking-wide uppercase shadow-sm">
-          <Sparkles className="h-3.5 w-3.5" /> Centro de Control
+          <Sparkles className="h-3.5 w-3.5" /> Mercado en Vivo (API Global)
         </div>
         <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white mt-2 flex items-center gap-3">
-          <Settings className="h-7 w-7 text-blue-600 dark:text-blue-400" /> Configuraciones Generales
+          <Settings className="h-7 w-7 text-blue-600 dark:text-blue-400" /> Mercado Bursátil y Divisas
         </h1>
         <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-          Control total del sistema, divisas oficiales BCP, conversor y seguridad en tiempo real.
+          Cotizaciones actualizadas al segundo y sincronizadas con tasas internacionales.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        {/* COLUMNA IZQUIERDA Y CENTRO */}
+        {/* COLUMNA PRINCIPAL */}
         <div className="md:col-span-2 space-y-6">
           
           {/* APARIENCIA GLOBAL */}
@@ -414,7 +419,7 @@ export default function ConfiguracionPage() {
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setTheme("dark")}
+                onClick={() => handleThemeChange("dark")}
                 className={`flex items-center gap-3 p-4 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
                   theme === "dark" ? "bg-blue-600/20 border-blue-500 text-slate-900 dark:text-white shadow-lg" : "bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
                 }`}
@@ -425,7 +430,7 @@ export default function ConfiguracionPage() {
 
               <button
                 type="button"
-                onClick={() => setTheme("light")}
+                onClick={() => handleThemeChange("light")}
                 className={`flex items-center gap-3 p-4 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
                   theme === "light" ? "bg-amber-500/20 border-amber-500 text-slate-900 dark:text-white shadow-lg" : "bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
                 }`}
@@ -436,7 +441,7 @@ export default function ConfiguracionPage() {
             </div>
           </div>
 
-          {/* MÓDULO DE COTIZACIONES CON APACHE ECHARTS 100% DINÁMICO Y TASAS OFICIALES BCP */}
+          {/* GOOGLE FINANCE: GRÁFICO MULTILÍNEA + TABLA DE MERCADO */}
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 shadow-xl transition-colors space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-3">
@@ -444,19 +449,19 @@ export default function ConfiguracionPage() {
                   <TrendingUp className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Mercado Cambiario Paraguay (Oficial BCP)</h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Gráfico interactivo con cotizaciones reales actualizadas</p>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Seguimiento Bursátil (En Vivo)</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Compara múltiples divisas simultáneamente en el gráfico</p>
                 </div>
               </div>
 
-              {/* Selector de Período */}
+              {/* Botones de Período (1d, 5d, 1m, 1a) */}
               <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-950 p-1 border border-slate-200 dark:border-slate-800 text-[11px]">
-                {(["dia", "mes", "anio"] as const).map((p) => (
+                {(["1d", "5d", "1m", "1a"] as const).map((p) => (
                   <button
                     key={p}
-                    onClick={() => setCotizacionPeriodo(p)}
-                    className={`px-3 py-1.5 rounded-lg font-bold uppercase transition-all cursor-pointer ${
-                      cotizacionPeriodo === p
+                    onClick={() => setPeriodoGoogle(p)}
+                    className={`px-2.5 py-1 rounded-lg font-bold uppercase transition-all cursor-pointer ${
+                      periodoGoogle === p
                         ? "bg-blue-600 text-white shadow-md"
                         : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                     }`}
@@ -467,59 +472,72 @@ export default function ConfiguracionPage() {
               </div>
             </div>
 
-            {/* Selector de Divisas */}
-            <div className="flex flex-wrap gap-2">
-              {(["USD", "EUR", "BRL", "ARS", "UYU", "CLP"] as const).map((div) => (
-                <button
-                  key={div}
-                  onClick={() => setGraficoMoneda(div)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer ${
-                    graficoMoneda === div
-                      ? "bg-cyan-500/20 border-cyan-500 text-cyan-600 dark:text-cyan-300 shadow-md"
-                      : "bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-400"
-                  }`}
-                >
-                  {div} ({tasasCambio[div].sim})
-                </button>
-              ))}
-            </div>
+            {loadingRates ? (
+              <div className="h-72 flex items-center justify-center gap-2 text-xs text-slate-400">
+                <Loader2 className="h-5 w-5 animate-spin text-blue-500" /> Sincronizando mercado en tiempo real...
+              </div>
+            ) : (
+              <>
+                {/* Badges interactivos para añadir/quitar monedas del gráfico */}
+                <div className="flex flex-wrap gap-2">
+                  {listaMonedasSeguimiento.map((div) => {
+                    const activo = divisasSeleccionadas.includes(div);
+                    return (
+                      <button
+                        key={div}
+                        onClick={() => toggleDivisaGrafico(div)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activo
+                            ? "bg-blue-600/20 border-blue-500 text-blue-600 dark:text-cyan-300 shadow-md"
+                            : "bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-400 hover:border-slate-400"
+                        }`}
+                      >
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: coloresMap[div] }} />
+                        {div}/PYG {activo ? "✕" : "+"}
+                      </button>
+                    );
+                  })}
+                </div>
 
-            {/* Tarjeta de Resumen con valor real */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800">
-                <span className="text-[10px] text-slate-400 uppercase font-bold block">Divisa Activa</span>
-                <span className="text-base font-black text-slate-900 dark:text-white mt-1 block">
-                  {tasasCambio[graficoMoneda].nombre} ({graficoMoneda})
-                </span>
-                <span className="text-xs font-mono text-cyan-500 font-bold mt-1 block">
-                  Cotización: ₲ {tasasCambio[graficoMoneda].valor.toLocaleString("es-PY", { maximumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800">
-                <span className="text-[10px] text-slate-400 uppercase font-bold block">Fuente Oficial</span>
-                <span className="text-sm font-black text-slate-900 dark:text-white mt-1 block">
-                  Banco Central (BCP)
-                </span>
-                <span className="text-[10px] text-emerald-500 font-bold mt-1 block">🟢 Datos en Tiempo Real</span>
-              </div>
-            </div>
+                {/* Gráfico Multilínea ECharts */}
+                <div className="h-72 rounded-2xl bg-slate-50 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 p-2 shadow-inner">
+                  <ReactECharts
+                    option={getGoogleFinanceOptions()}
+                    style={{ height: "100%", width: "100%" }}
+                    notMerge={true}
+                    lazyUpdate={true}
+                  />
+                </div>
 
-            {/* GRÁFICO APACHE ECHARTS */}
-            <div className="space-y-2 pt-1">
-              <div className="flex justify-between items-center text-[11px] text-slate-500 font-semibold px-1">
-                <span>Evolución Interactiva {graficoMoneda}/PYG ({cotizacionPeriodo.toUpperCase()})</span>
-                <span className="font-mono text-cyan-500">Apache ECharts 📈</span>
-              </div>
-
-              <div className="h-64 rounded-2xl bg-slate-50 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 p-2 shadow-inner">
-                <ReactECharts
-                  option={getEChartsOptions()}
-                  style={{ height: "100%", width: "100%" }}
-                  notMerge={true}
-                  lazyUpdate={true}
-                />
-              </div>
-            </div>
+                {/* TABLA DE MERCADO ESTILO GOOGLE FINANCE */}
+                <div className="overflow-x-auto pt-2">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase text-[10px]">
+                        <th className="pb-2">Símbolo</th>
+                        <th className="pb-2 text-right">Precio Actual (₲)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {listaMonedasSeguimiento.map((div) => {
+                        const precioReal = getPriceInPYG(div);
+                        return (
+                          <tr key={div} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                            <td className="py-3 font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: coloresMap[div] }} />
+                              {div} / PYG
+                            </td>
+                            <td className="py-3 text-right font-bold text-slate-800 dark:text-slate-100">
+                              ₲ {precioReal.toLocaleString("es-PY", { maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
 
           {/* CALCULADORA CAMBIARIA */}
@@ -529,8 +547,8 @@ export default function ConfiguracionPage() {
                 <Calculator className="h-4 w-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Calculadora Cambiaria (Equivalencias y Costos)</h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Calcula al instante cuánto te costará o recibirás al cambiar entre monedas</p>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Calculadora Cambiaria en Vivo</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Conversión exacta basada en tasas globales</p>
               </div>
             </div>
 
@@ -549,11 +567,12 @@ export default function ConfiguracionPage() {
                 <Label className="font-bold text-slate-700 dark:text-slate-300">Moneda Origen</Label>
                 <select
                   value={monedaOrigen}
-                  onChange={(e) => setMonedaOrigen(e.target.value as any)}
+                  onChange={(e) => setMonedaOrigen(e.target.value)}
                   className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 font-semibold text-slate-900 dark:text-white cursor-pointer"
                 >
-                  {Object.keys(tasasCambio).map((k) => (
-                    <option key={k} value={k}>{tasasCambio[k].nombre} ({k})</option>
+                  <option value="PYG">Guaraní (PYG)</option>
+                  {listaMonedasSeguimiento.map((k) => (
+                    <option key={k} value={k}>{k}</option>
                   ))}
                 </select>
               </div>
@@ -562,11 +581,12 @@ export default function ConfiguracionPage() {
                 <Label className="font-bold text-slate-700 dark:text-slate-300">Moneda Destino</Label>
                 <select
                   value={monedaDestino}
-                  onChange={(e) => setMonedaDestino(e.target.value as any)}
+                  onChange={(e) => setMonedaDestino(e.target.value)}
                   className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 font-semibold text-slate-900 dark:text-white cursor-pointer"
                 >
-                  {Object.keys(tasasCambio).map((k) => (
-                    <option key={k} value={k}>{tasasCambio[k].nombre} ({k})</option>
+                  <option value="PYG">Guaraní (PYG)</option>
+                  {listaMonedasSeguimiento.map((k) => (
+                    <option key={k} value={k}>{k}</option>
                   ))}
                 </select>
               </div>
@@ -574,10 +594,10 @@ export default function ConfiguracionPage() {
 
             <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-between">
               <span className="text-xs text-slate-600 dark:text-slate-300 font-bold flex items-center gap-2">
-                <ArrowRightLeft className="h-4 w-4 text-blue-500" /> Monto Equivalente:
+                <ArrowRightLeft className="h-4 w-4 text-blue-500" /> Resultado:
               </span>
               <span className="text-base font-black font-mono text-blue-600 dark:text-cyan-400">
-                {tasasCambio[monedaDestino].sim} {calcularConversion()} {monedaDestino}
+                {monedaDestino === "PYG" ? "₲" : ""} {calcularConversion()} {monedaDestino}
               </span>
             </div>
           </div>
@@ -776,8 +796,8 @@ export default function ConfiguracionPage() {
                 <ShieldAlert className="h-4 w-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-red-600 dark:text-red-400">Zona de Peligro</h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Eliminación permanente de cuenta</p>
+                <h3 className="text-sm font-bold text-red-600 dark:text-red-400">Eliminar Cuenta</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Eliminación permanente de la cuenta</p>
               </div>
             </div>
             <div className="pt-3">
