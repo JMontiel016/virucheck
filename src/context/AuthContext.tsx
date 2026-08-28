@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * CONTEXTO DE AUTENTICACIÓN - VIRUCHECK
+ * ============================================================================
+ * Gestiona la sesión global de Firebase, perfiles de Firestore y soporte para Google.
+ */
+
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
@@ -23,7 +30,7 @@ interface AuthContextType {
   loading: boolean;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (name: string, email: string, pass: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
+  loginWithGoogle: () => Promise<{ user: User; isNewUser: boolean }>; // Devuelve el objeto user y el booleano isNewUser
   resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -109,6 +116,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(newProfile);
   };
 
+  /**
+   * loginWithGoogle verificado: comprueba si el usuario existe en Firestore
+   * para determinar si es un usuario nuevo y obligarlo a registrar su contraseña.
+   */
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     const cred = await signInWithPopup(auth, provider);
@@ -116,15 +127,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const docRef = doc(db, "users", cred.user.uid);
     const docSnap = await getDoc(docRef);
 
+    let isNewUser = false;
+
     if (!docSnap.exists()) {
-      const newProfile: UserProfile = {
-        uid: cred.user.uid,
-        email: cred.user.email || "",
-        displayName: cred.user.displayName || "Usuario",
-        createdAt: new Date(),
-      };
-      await setDoc(docRef, { ...newProfile, createdAt: serverTimestamp() });
-      setProfile(newProfile);
+      isNewUser = true; // Se marca como nuevo para que el Login lo intercepte
     } else {
       const data = docSnap.data();
       setProfile({
@@ -134,13 +140,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     localStorage.setItem(SESSION_TIMESTAMP_KEY, Date.now().toString());
+    return { user: cred.user, isNewUser };
   };
 
   const resetPassword = async (email: string) => {
     try {
       auth.languageCode = "es";
-
-      // Detectar URL dinámica actual (devtunnels, localhost, producción)
       const currentOrigin =
         typeof window !== "undefined" && window.location.origin
           ? window.location.origin
