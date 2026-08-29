@@ -1,11 +1,9 @@
 /**
  * ============================================================================
- * MÓDULO PROFESIONAL DE MOVIMIENTOS, CUOTAS Y PRÉSTAMOS - VIRUCHECK
+ * MÓDULO PROFESIONAL DE MOVIMIENTOS Y CUOTAS - VIRUCHECK
  * ============================================================================
+ * - Cálculo correcto de cuotas con interés total integrado.
  * - Compatibilidad total con Modo Claro y Oscuro adaptativa.
- * - Textos profesionales y formales con ejemplos financieros comunes.
- * - Alertas y modales con diseño moderno y minimalista de alta gama.
- * - Estructura responsiva impecable en dispositivos móviles y portátiles.
  */
 
 "use client";
@@ -60,13 +58,9 @@ import {
   Activity,
   CalendarIcon,
   CreditCard,
-  Percent,
-  Check
+  Percent
 } from "lucide-react";
 
-// ==========================================
-// 1. INTERFACES Y TIPADOS DE DATOS
-// ==========================================
 interface TransactionItem {
   id: string;
   userId: string;
@@ -84,15 +78,11 @@ interface TransactionItem {
   isMyExpense?: boolean;
   isFiscalInvoice?: boolean;
   
-  // Control de Cuotas y Préstamos
   isInstallment?: boolean;
   installmentCurrent?: number;
   installmentTotal?: number;
   isPaid?: boolean;
   interestRate?: number;
-
-  isLoan?: boolean;
-  loanRemainingBalance?: number;
 
   gravada10?: number;
   gravada5?: number;
@@ -126,7 +116,6 @@ const CATEGORIES_EXPENSE = [
   { id: "Salud y Farmacia", icon: HeartPulse },
   { id: "Ocio y Salidas", icon: Coffee },
   { id: "Cuotas y Créditos", icon: CreditCard },
-  { id: "Préstamos Bancarios", icon: Percent },
   { id: "Otros Gastos", icon: Tag },
 ];
 
@@ -154,32 +143,23 @@ const parsePYG = (str: string) => {
   return isNaN(val) ? 0 : val;
 };
 
-// ==========================================
-// 2. COMPONENTE PRINCIPAL
-// ==========================================
 export default function MovimientosPage() {
   const { user } = useAuth();
 
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Pestañas principales
   const [activeTab, setActiveTab] = useState<"propias" | "terceros" | "recibos">("propias");
-
-  // Filtros y Búsqueda
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
 
-  // Paginación
   const [itemsPerPage, setItemsPerPage] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Fechas y Periodo
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
 
-  // Modal Crear / Editar detallado
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formType, setFormType] = useState<"expense" | "income">("expense");
@@ -194,20 +174,16 @@ export default function MovimientosPage() {
   const [formCdc, setFormCdc] = useState("");
   const [formIsMyExpense, setFormIsMyExpense] = useState(true);
   
-  // Campos tributarios opcionales
   const [formGravada10, setFormGravada10] = useState("");
   const [formGravada5, setFormGravada5] = useState("");
   const [formExenta, setFormExenta] = useState("");
 
-  // Cuotas y Préstamos
   const [isInstallment, setIsInstallment] = useState(false);
   const [installmentTotal, setInstallmentTotal] = useState("12");
   const [installmentInterest, setInstallmentInterest] = useState("0");
-  const [isLoan, setIsLoan] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Escáner OCR y Visor PNG
   const [isScanning, setIsScanning] = useState(false);
   const [scannedImages, setScannedImages] = useState<string[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
@@ -218,7 +194,6 @@ export default function MovimientosPage() {
   const [itemToDelete, setItemToDelete] = useState<TransactionItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Sistema de Alertas Toast flotantes
   const [toast, setToast] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
   const showToast = (type: "error" | "success", text: string) => {
@@ -226,9 +201,6 @@ export default function MovimientosPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // ==========================================
-  // 3. CARGA DE DATOS EN TIEMPO REAL (FIREBASE)
-  // ==========================================
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -254,9 +226,6 @@ export default function MovimientosPage() {
 
   const currentMonthKey = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
 
-  // ==========================================
-  // 4. FILTRADO POR PESTAÑAS Y BÚSQUEDA
-  // ==========================================
   const filteredList = useMemo(() => {
     let result = transactions.filter((t) => {
       const isRecibo = (t.docType || "").toLowerCase().includes("recibo");
@@ -310,22 +279,11 @@ export default function MovimientosPage() {
     [myTransactions]
   );
 
-  // ==========================================
-  // 5. CAMBIAR ESTADO DE PAGO DE CUOTAS
-  // ==========================================
   const toggleInstallmentPaid = async (item: TransactionItem) => {
     try {
       const newPaidState = !item.isPaid;
-      let finalAmount = item.amount;
-
-      if (newPaidState && item.interestRate && item.interestRate > 0) {
-        const interestExtra = (item.amount * item.interestRate) / 100;
-        finalAmount += interestExtra;
-      }
-
       await updateDoc(doc(db, "transactions", item.id), {
         isPaid: newPaidState,
-        amount: finalAmount,
         updatedAt: serverTimestamp(),
       });
       showToast("success", `Cuota marcada como ${newPaidState ? "Pagada" : "Pendiente"}.`);
@@ -335,9 +293,6 @@ export default function MovimientosPage() {
     }
   };
 
-  // ==========================================
-  // 6. GRÁFICO DE EVOLUCIÓN EXTENDIDO
-  // ==========================================
   const chartData = useMemo(() => {
     const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
     const points = [];
@@ -345,16 +300,15 @@ export default function MovimientosPage() {
       const dayStr = `${currentMonthKey}-${String(day).padStart(2, "0")}`;
       
       const income = transactions.filter((t) => t.type === "income" && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
-      const expense = transactions.filter((t) => t.type === "expense" && !t.isInstallment && !t.isLoan && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
+      const expense = transactions.filter((t) => t.type === "expense" && !t.isInstallment && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
       const installment = transactions.filter((t) => t.isInstallment && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
-      const loan = transactions.filter((t) => t.isLoan && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
 
-      points.push({ label: `${day}`, income, expense, installment, loan });
+      points.push({ label: `${day}`, income, expense, installment });
     }
     return points;
   }, [selectedYear, selectedMonth, currentMonthKey, transactions]);
 
-  const maxChartVal = Math.max(...chartData.map((d) => Math.max(d.income, d.expense, d.installment, d.loan)), 100000);
+  const maxChartVal = Math.max(...chartData.map((d) => Math.max(d.income, d.expense, d.installment)), 100000);
   const svgWidth = 700;
   const svgHeight = 160;
   const paddingX = 25;
@@ -362,9 +316,9 @@ export default function MovimientosPage() {
 
   const pointsCoords = useMemo(() => {
     const total = chartData.length;
-    if (total === 0) return { inc: [], exp: [], inst: [], ln: [] };
+    if (total === 0) return { inc: [], exp: [], inst: [] };
     
-    const getPts = (key: "income" | "expense" | "installment" | "loan") =>
+    const getPts = (key: "income" | "expense" | "installment") =>
       chartData.map((item, i) => {
         const x = paddingX + (i / (total - 1 || 1)) * (svgWidth - paddingX * 2);
         const ratio = item[key] / maxChartVal;
@@ -372,12 +326,9 @@ export default function MovimientosPage() {
         return { x, y, ...item };
       });
 
-    return { inc: getPts("income"), exp: getPts("expense"), inst: getPts("installment"), ln: getPts("loan") };
+    return { inc: getPts("income"), exp: getPts("expense"), inst: getPts("installment") };
   }, [chartData, maxChartVal, svgWidth, svgHeight]);
 
-  // ==========================================
-  // 7. MANEJADORES DE ACCIÓN Y ESCÁNER OCR
-  // ==========================================
   const handleOpenCreate = (type: "expense" | "income" = "expense") => {
     setEditingId(null);
     setScannedImages([]);
@@ -396,7 +347,6 @@ export default function MovimientosPage() {
     setIsInstallment(false);
     setInstallmentTotal("12");
     setInstallmentInterest("0");
-    setIsLoan(false);
     setFormGravada10("");
     setFormGravada5("");
     setFormExenta("");
@@ -421,7 +371,6 @@ export default function MovimientosPage() {
     setIsInstallment(item.isInstallment ?? false);
     setInstallmentTotal(String(item.installmentTotal || 12));
     setInstallmentInterest(String(item.interestRate || 0));
-    setIsLoan(item.isLoan ?? false);
     setFormGravada10(item.gravada10 ? formatPYG(item.gravada10) : "");
     setFormGravada5(item.gravada5 ? formatPYG(item.gravada5) : "");
     setFormExenta(item.exenta ? formatPYG(item.exenta) : "");
@@ -454,7 +403,7 @@ export default function MovimientosPage() {
       setFormAmountInput(formatPYG(docData.amount));
       setFormDescription(docData.productDetail || "Compra de insumos generales");
       setFormCategory(docData.category || "Otros Gastos");
-      setFormCounterparty(docData.businessName || "Supermercado El Ahorro S.A.");
+      setFormCounterparty(docData.businessName || "Supermercado Stock S.A.");
       setFormDate(docData.date || new Date().toISOString().split("T")[0]);
       setFormDocNumber(docData.documentNumber || "001-001-0012345");
       setFormCdc(docData.cdc || "");
@@ -480,9 +429,12 @@ export default function MovimientosPage() {
 
     setIsSubmitting(true);
     try {
+      const interestPct = isInstallment ? parseFloat(installmentInterest) || 0 : 0;
+      // Cálculo del monto total incluyendo el interés por sobre el principal
+      const totalAmountWithInterest = cleanAmt + (cleanAmt * interestPct) / 100;
+
       const basePayload: Record<string, any> = {
         userId: user.uid,
-        amount: cleanAmt,
         currency: "PYG",
         type: formType,
         isFiscalInvoice,
@@ -495,8 +447,7 @@ export default function MovimientosPage() {
         cdc: formCdc.trim() || "",
         isMyExpense: formIsMyExpense,
         isInstallment: Boolean(isInstallment),
-        isLoan: Boolean(isLoan),
-        interestRate: isInstallment ? parseFloat(installmentInterest) || 0 : 0,
+        interestRate: interestPct,
         gravada10: parsePYG(formGravada10) || 0,
         gravada5: parsePYG(formGravada5) || 0,
         exenta: parsePYG(formExenta) || 0,
@@ -504,25 +455,21 @@ export default function MovimientosPage() {
       };
 
       if (isInstallment) {
-        basePayload.installmentCurrent = 1;
         basePayload.installmentTotal = parseInt(installmentTotal) || 12;
-        basePayload.isPaid = false;
-      }
-
-      if (isLoan) {
-        basePayload.loanRemainingBalance = cleanAmt;
       }
 
       if (editingId) {
         await updateDoc(doc(db, "transactions", editingId), {
           ...basePayload,
+          amount: totalAmountWithInterest,
           updatedAt: serverTimestamp(),
         });
         showToast("success", "¡Movimiento actualizado correctamente!");
       } else {
         if (isInstallment) {
           const totalInst = parseInt(installmentTotal) || 12;
-          const monthlyAmount = cleanAmt / totalInst;
+          // Se divide el monto con el interés ya sumado entre los meses totales
+          const monthlyAmount = totalAmountWithInterest / totalInst;
           const [y, m, d] = formDate.split("-").map(Number);
 
           for (let i = 1; i <= totalInst; i++) {
@@ -540,10 +487,11 @@ export default function MovimientosPage() {
               createdAt: serverTimestamp(),
             });
           }
-          showToast("success", `¡Plan de ${totalInst} cuotas registrado con éxito!`);
+          showToast("success", `¡Plan de ${totalInst} cuotas registrado con éxito (interés incluido)!`);
         } else {
           await addDoc(collection(db, "transactions"), {
             ...basePayload,
+            amount: cleanAmt,
             createdAt: serverTimestamp(),
           });
           showToast("success", "¡Movimiento guardado con éxito!");
@@ -647,7 +595,7 @@ export default function MovimientosPage() {
             Libro de Movimientos y Cuotas
           </h1>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            Control eficiente de ingresos, egresos, comprobantes fiscales, cuotas con check y créditos bancarios.
+            Control eficiente de ingresos, egresos, comprobantes fiscales y cuotas con check de pago e intereses.
           </p>
         </div>
 
@@ -745,7 +693,7 @@ export default function MovimientosPage() {
               <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                 Evolución Analítica Contable
               </h3>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">Ingresos, Gastos Comunes, Cuotas y Préstamos</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Ingresos, Gastos Comunes y Cuotas</p>
             </div>
           </div>
 
@@ -753,7 +701,6 @@ export default function MovimientosPage() {
             <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><span className="h-2 w-2 rounded-full bg-emerald-500"></span> Ingresos</span>
             <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400"><span className="h-2 w-2 rounded-full bg-rose-500"></span> Gastos</span>
             <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><span className="h-2 w-2 rounded-full bg-amber-500"></span> Cuotas</span>
-            <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400"><span className="h-2 w-2 rounded-full bg-purple-500"></span> Préstamos</span>
           </div>
         </div>
 
@@ -764,13 +711,11 @@ export default function MovimientosPage() {
                 <linearGradient id="lInc" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#34d399" /></linearGradient>
                 <linearGradient id="lExp" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f43f5e" /><stop offset="100%" stopColor="#fb7185" /></linearGradient>
                 <linearGradient id="lInst" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f59e0b" /><stop offset="100%" stopColor="#fbbf24" /></linearGradient>
-                <linearGradient id="lLn" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#a855f7" /><stop offset="100%" stopColor="#c084fc" /></linearGradient>
               </defs>
 
               {pointsCoords.inc.length > 1 && <path d={pointsCoords.inc.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lInc)" strokeWidth="2.5" />}
               {pointsCoords.exp.length > 1 && <path d={pointsCoords.exp.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lExp)" strokeWidth="2.5" />}
               {pointsCoords.inst.length > 1 && <path d={pointsCoords.inst.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lInst)" strokeWidth="2.5" />}
-              {pointsCoords.ln.length > 1 && <path d={pointsCoords.ln.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lLn)" strokeWidth="2.5" />}
             </svg>
 
             <div className="flex justify-between px-4 pt-2 border-t border-slate-200 dark:border-slate-800/80">
@@ -845,12 +790,7 @@ export default function MovimientosPage() {
                         {item.isInstallment && (
                           <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
                             Cuota {item.installmentCurrent}/{item.installmentTotal} {item.isPaid ? "(Pagado)" : "(Pendiente)"}
-                          </span>
-                        )}
-
-                        {item.isLoan && (
-                          <span className="px-2.5 py-0.5 rounded-lg bg-purple-500/10 text-purple-700 dark:text-purple-400 text-[10px] font-bold border border-purple-500/20">
-                            Préstamo
+                            {item.interestRate ? ` • +${item.interestRate}% mora` : ""}
                           </span>
                         )}
                       </div>
@@ -892,7 +832,7 @@ export default function MovimientosPage() {
         )}
       </div>
 
-      {/* MODAL CREAR / EDITAR CON EJEMPLOS COMUNES */}
+      {/* MODAL CREAR / EDITAR */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
           <div className="w-full max-w-xl rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
@@ -948,7 +888,7 @@ export default function MovimientosPage() {
 
               {/* Monto con teclado numérico */}
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Monto Total (₲) *</Label>
+                <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Monto Total Principal (₲) *</Label>
                 <Input
                   type="text"
                   inputMode="numeric"
@@ -959,44 +899,30 @@ export default function MovimientosPage() {
                     const parsed = parsePYG(formAmountInput);
                     if (parsed > 0) setFormAmountInput(formatPYG(parsed));
                   }}
-                  placeholder="Ej: 150.000"
+                  placeholder="Ej: 3.800.000"
                   className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-black text-base px-4 font-mono"
                 />
               </div>
 
-              {/* CUOTAS Y PRÉSTAMOS */}
+              {/* CUOTAS */}
               {formType === "expense" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 text-[11px]"><CreditCard className="h-4 w-4" /> En Cuotas Mes a Mes</span>
-                      <input type="checkbox" checked={isInstallment} onChange={(e) => setIsInstallment(e.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-500 cursor-pointer" />
-                    </div>
-                    {isInstallment && (
-                      <div className="space-y-2 pt-2 border-t border-amber-500/20">
-                        <div>
-                          <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">Plazo (Meses)</Label>
-                          <Input type="number" inputMode="numeric" min={2} max={60} value={installmentTotal} onChange={(e) => setInstallmentTotal(e.target.value)} className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
-                        </div>
-                        <div>
-                          <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">% Interés por Mora (Opcional)</Label>
-                          <Input type="number" inputMode="numeric" min={0} max={100} value={installmentInterest} onChange={(e) => setInstallmentInterest(e.target.value)} placeholder="Ej: 5" className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
-                        </div>
-                      </div>
-                    )}
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 text-[11px]"><CreditCard className="h-4 w-4" /> En Cuotas Mes a Mes</span>
+                    <input type="checkbox" checked={isInstallment} onChange={(e) => setIsInstallment(e.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-500 cursor-pointer" />
                   </div>
-
-                  <div className="rounded-2xl border border-purple-500/30 bg-purple-50/50 dark:bg-purple-950/20 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 text-[11px]"><Percent className="h-4 w-4" /> Es Préstamo Bancario</span>
-                      <input type="checkbox" checked={isLoan} onChange={(e) => setIsLoan(e.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-purple-500 cursor-pointer" />
-                    </div>
-                    {isLoan && (
-                      <div className="pt-2 border-t border-purple-500/20">
-                        <p className="text-[10px] text-slate-600 dark:text-slate-300">Registra el capital pendiente del préstamo como deuda activa.</p>
+                  {isInstallment && (
+                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-amber-500/20">
+                      <div>
+                        <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">Plazo (Meses)</Label>
+                        <Input type="number" inputMode="numeric" min={2} max={60} value={installmentTotal} onChange={(e) => setInstallmentTotal(e.target.value)} className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
                       </div>
-                    )}
-                  </div>
+                      <div>
+                        <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">% Interés Total (Ej: 20)</Label>
+                        <Input type="number" inputMode="numeric" min={0} max={100} value={installmentInterest} onChange={(e) => setInstallmentInterest(e.target.value)} placeholder="Ej: 20" className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1010,7 +936,7 @@ export default function MovimientosPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Local / Emisor</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej. Supermercado Stock S.A." className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Local / Emisor</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej. Banco o Comercio" className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4" /></div>
                     <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">N° de Factura</Label><Input value={formDocNumber} onChange={(e) => setFormDocNumber(e.target.value)} placeholder="001-001-0001234" className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
                   </div>
 
@@ -1020,7 +946,7 @@ export default function MovimientosPage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Detalle / Concepto Amplio *</Label>
-                <textarea required rows={3} value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Ej: Compra de víveres para el hogar y artículos de limpieza." className="w-full rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-900 dark:text-slate-100 outline-none resize-none font-medium" />
+                <textarea required rows={3} value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Ej: PRESTAMO DE IPAD" className="w-full rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-900 dark:text-slate-100 outline-none resize-none font-medium" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
