@@ -2,7 +2,7 @@
  * ============================================================================
  * MÓDULO PROFESIONAL DE MOVIMIENTOS Y CUOTAS - VIRUCHECK
  * ============================================================================
- * - Cálculo correcto de cuotas con interés total integrado.
+ * - Cálculos contables exactos para cuotas fijas e intereses.
  * - Compatibilidad total con Modo Claro y Oscuro adaptativa.
  */
 
@@ -83,6 +83,8 @@ interface TransactionItem {
   installmentTotal?: number;
   isPaid?: boolean;
   interestRate?: number;
+  originalTotalAmount?: number;
+  paidAmount?: number;
 
   gravada10?: number;
   gravada5?: number;
@@ -160,11 +162,13 @@ export default function MovimientosPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
 
+  // Modal Crear / Editar
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingItemFull, setEditingItemFull] = useState<TransactionItem | null>(null);
   const [formType, setFormType] = useState<"expense" | "income">("expense");
-  const [isFiscalInvoice, setIsFiscalInvoice] = useState<boolean>(true);
-  const [formDocType, setFormDocType] = useState("Factura");
+  const [isFiscalInvoice, setIsFiscalInvoice] = useState<boolean>(false);
+  const [formDocType, setFormDocType] = useState("Gasto Común");
   const [formAmountInput, setFormAmountInput] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formCategory, setFormCategory] = useState("Alimentación / Supermercado");
@@ -179,14 +183,22 @@ export default function MovimientosPage() {
   const [formExenta, setFormExenta] = useState("");
 
   const [isInstallment, setIsInstallment] = useState(false);
+  const [installmentMode, setInstallmentMode] = useState<"fixed" | "interest">("fixed");
   const [installmentTotal, setInstallmentTotal] = useState("12");
   const [installmentInterest, setInstallmentInterest] = useState("0");
+  const [formIsPaid, setFormIsPaid] = useState(false);
+  const [editScope, setEditScope] = useState<"single" | "global">("single");
+
+  // Modal de Pago Parcial / Mínimo
+  const [partialPaymentItem, setPartialPaymentItem] = useState<TransactionItem | null>(null);
+  const [partialAmountInput, setPartialAmountInput] = useState("");
+  const [accumulateNextMonth, setAccumulateNextMonth] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [isScanning, setIsScanning] = useState(false);
   const [scannedImages, setScannedImages] = useState<string[]>([]);
-  const [activePageIndex, setActivePageIndex] = useState(0);
+  const [activePageIndex, setActivePageIndex] = useState(0); // Declaración corregida
   const [zoomImageModal, setZoomImageModal] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -293,6 +305,63 @@ export default function MovimientosPage() {
     }
   };
 
+  const handleSavePartialPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!partialPaymentItem || !user?.uid) return;
+
+    const paidPart = parsePYG(partialAmountInput);
+    const totalCuota = partialPaymentItem.amount;
+
+    if (paidPart <= 0 || paidPart > totalCuota) {
+      showToast("error", "El monto pagado debe ser mayor a 0 y menor o igual al valor de la cuota.");
+      return;
+    }
+
+    try {
+      const saldoPendiente = totalCuota - paidPart;
+
+      await updateDoc(doc(db, "transactions", partialPaymentItem.id), {
+        amount: paidPart,
+        paidAmount: paidPart,
+        isPaid: true,
+        updatedAt: serverTimestamp(),
+      });
+
+      if (accumulateNextMonth && saldoPendiente > 0) {
+        const [y, m, d] = partialPaymentItem.date.split("-").map(Number);
+        const nextMonthDateObj = new Date(y, m, d || 1);
+        const nextMonthStr = nextMonthDateObj.toISOString().split("T")[0];
+
+        await addDoc(collection(db, "transactions"), {
+          userId: user.uid,
+          currency: "PYG",
+          type: "expense",
+          isFiscalInvoice: partialPaymentItem.isFiscalInvoice,
+          docType: partialPaymentItem.docType,
+          categoryId: partialPaymentItem.categoryId,
+          description: `${partialPaymentItem.description.replace(/\(Cuota.*\)/, "").trim()} (Saldo Acumulado)`,
+          counterpartyName: partialPaymentItem.counterpartyName,
+          date: nextMonthStr,
+          documentNumber: partialPaymentItem.documentNumber,
+          isMyExpense: true,
+          isInstallment: true,
+          installmentCurrent: (partialPaymentItem.installmentCurrent || 1) + 1,
+          installmentTotal: partialPaymentItem.installmentTotal || 12,
+          isPaid: false,
+          amount: saldoPendiente,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      setPartialPaymentItem(null);
+      setPartialAmountInput("");
+      showToast("success", `Pago parcial registrado. Saldo pendiente de ${formatPYG(saldoPendiente)} ₲ gestionado.`);
+    } catch (err) {
+      console.error(err);
+      showToast("error", "No se pudo registrar el pago parcial.");
+    }
+  };
+
   const chartData = useMemo(() => {
     const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
     const points = [];
@@ -331,11 +400,12 @@ export default function MovimientosPage() {
 
   const handleOpenCreate = (type: "expense" | "income" = "expense") => {
     setEditingId(null);
+    setEditingItemFull(null);
     setScannedImages([]);
     setActivePageIndex(0);
     setFormType(type);
-    setIsFiscalInvoice(true);
-    setFormDocType("Factura");
+    setIsFiscalInvoice(false);
+    setFormDocType("Gasto Común");
     setFormAmountInput("");
     setFormDescription("");
     setFormCategory(type === "expense" ? "Alimentación / Supermercado" : "Bono / Ingreso Extra");
@@ -345,8 +415,11 @@ export default function MovimientosPage() {
     setFormCdc("");
     setFormIsMyExpense(true);
     setIsInstallment(false);
+    setInstallmentMode("fixed");
     setInstallmentTotal("12");
     setInstallmentInterest("0");
+    setFormIsPaid(false);
+    setEditScope("single");
     setFormGravada10("");
     setFormGravada5("");
     setFormExenta("");
@@ -355,11 +428,12 @@ export default function MovimientosPage() {
 
   const handleOpenEdit = (item: TransactionItem) => {
     setEditingId(item.id);
+    setEditingItemFull(item);
     setScannedImages(item.receiptImages || []);
     setActivePageIndex(0);
     setFormType(item.type);
-    setIsFiscalInvoice(item.isFiscalInvoice ?? true);
-    setFormDocType(item.docType || "Factura");
+    setIsFiscalInvoice(item.isFiscalInvoice ?? false);
+    setFormDocType(item.docType || "Gasto Común");
     setFormAmountInput(formatPYG(item.amount));
     setFormDescription(item.description || "");
     setFormCategory(item.categoryId || "Otros Gastos");
@@ -369,8 +443,11 @@ export default function MovimientosPage() {
     setFormCdc(item.cdc || "");
     setFormIsMyExpense(item.isMyExpense !== false);
     setIsInstallment(item.isInstallment ?? false);
+    setInstallmentMode(item.interestRate && item.interestRate > 0 ? "interest" : "fixed");
     setInstallmentTotal(String(item.installmentTotal || 12));
     setInstallmentInterest(String(item.interestRate || 0));
+    setFormIsPaid(item.isPaid ?? false);
+    setEditScope("single");
     setFormGravada10(item.gravada10 ? formatPYG(item.gravada10) : "");
     setFormGravada5(item.gravada5 ? formatPYG(item.gravada5) : "");
     setFormExenta(item.exenta ? formatPYG(item.exenta) : "");
@@ -397,11 +474,12 @@ export default function MovimientosPage() {
       }
 
       setEditingId(null);
+      setEditingItemFull(null);
       setFormType(docData.financialType || "expense");
       setIsFiscalInvoice(true);
       setFormDocType(docData.docType || "Factura");
       setFormAmountInput(formatPYG(docData.amount));
-      setFormDescription(docData.productDetail || "Compra de insumos generales");
+      setFormDescription(docData.productDetail || "Compra de mercaderías para stock");
       setFormCategory(docData.category || "Otros Gastos");
       setFormCounterparty(docData.businessName || "Supermercado Stock S.A.");
       setFormDate(docData.date || new Date().toISOString().split("T")[0]);
@@ -429,9 +507,15 @@ export default function MovimientosPage() {
 
     setIsSubmitting(true);
     try {
-      const interestPct = isInstallment ? parseFloat(installmentInterest) || 0 : 0;
-      // Cálculo del monto total incluyendo el interés por sobre el principal
-      const totalAmountWithInterest = cleanAmt + (cleanAmt * interestPct) / 100;
+      let finalAmountToSave = cleanAmt;
+      let interestVal = 0;
+
+      if (isInstallment && installmentMode === "interest") {
+        interestVal = parseFloat(installmentInterest) || 0;
+        if (interestVal > 0) {
+          finalAmountToSave = cleanAmt + (cleanAmt * interestVal) / 100;
+        }
+      }
 
       const basePayload: Record<string, any> = {
         userId: user.uid,
@@ -447,7 +531,8 @@ export default function MovimientosPage() {
         cdc: formCdc.trim() || "",
         isMyExpense: formIsMyExpense,
         isInstallment: Boolean(isInstallment),
-        interestRate: interestPct,
+        interestRate: interestVal,
+        isPaid: Boolean(formIsPaid),
         gravada10: parsePYG(formGravada10) || 0,
         gravada5: parsePYG(formGravada5) || 0,
         exenta: parsePYG(formExenta) || 0,
@@ -459,17 +544,31 @@ export default function MovimientosPage() {
       }
 
       if (editingId) {
-        await updateDoc(doc(db, "transactions", editingId), {
-          ...basePayload,
-          amount: totalAmountWithInterest,
-          updatedAt: serverTimestamp(),
-        });
-        showToast("success", "¡Movimiento actualizado correctamente!");
+        if (editScope === "global" && editingItemFull?.isInstallment) {
+          const baseDesc = editingItemFull.description.replace(/\(Cuota.*\)/, "").trim();
+          const relatedCuotas = transactions.filter(t => t.isInstallment && t.description.includes(baseDesc));
+
+          for (const c of relatedCuotas) {
+            await updateDoc(doc(db, "transactions", c.id), {
+              ...basePayload,
+              description: `${baseDesc} (Cuota ${c.installmentCurrent}/${c.installmentTotal})`,
+              amount: installmentMode === "fixed" ? cleanAmt : finalAmountToSave / (c.installmentTotal || 12),
+              updatedAt: serverTimestamp(),
+            });
+          }
+          showToast("success", "¡Plan de cuotas actualizado en general correctamente!");
+        } else {
+          await updateDoc(doc(db, "transactions", editingId), {
+            ...basePayload,
+            amount: finalAmountToSave,
+            updatedAt: serverTimestamp(),
+          });
+          showToast("success", "¡Movimiento actualizado correctamente!");
+        }
       } else {
         if (isInstallment) {
           const totalInst = parseInt(installmentTotal) || 12;
-          // Se divide el monto con el interés ya sumado entre los meses totales
-          const monthlyAmount = totalAmountWithInterest / totalInst;
+          const monthlyAmount = installmentMode === "fixed" ? cleanAmt : finalAmountToSave / totalInst;
           const [y, m, d] = formDate.split("-").map(Number);
 
           for (let i = 1; i <= totalInst; i++) {
@@ -483,11 +582,11 @@ export default function MovimientosPage() {
               installmentTotal: totalInst,
               description: `${formDescription.trim()} (Cuota ${i}/${totalInst})`,
               date: instDateStr,
-              isPaid: i === 1,
+              isPaid: i === 1 ? formIsPaid : false,
               createdAt: serverTimestamp(),
             });
           }
-          showToast("success", `¡Plan de ${totalInst} cuotas registrado con éxito (interés incluido)!`);
+          showToast("success", `¡Plan de ${totalInst} cuotas registrado con éxito!`);
         } else {
           await addDoc(collection(db, "transactions"), {
             ...basePayload,
@@ -502,7 +601,7 @@ export default function MovimientosPage() {
       setScannedImages([]);
     } catch (err) {
       console.error("Error al guardar en Firebase:", err);
-      showToast("error", "No se pudo guardar el registro.");
+      showToast("error", "Error de permisos o conexión al guardar en Firestore.");
     } finally {
       setIsSubmitting(false);
     }
@@ -560,9 +659,6 @@ export default function MovimientosPage() {
   const shortMonthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Set", "Oct", "Nov", "Dic"];
   const availableYears = Array.from({ length: 16 }, (_, i) => 2020 + i);
 
-  // ==========================================
-  // 9. RENDERIZADO VISUAL PROFESIONAL ADAPTATIVO
-  // ==========================================
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6 pb-28 md:pb-12 px-4 sm:px-6 animate-in fade-in duration-300">
       
@@ -585,7 +681,7 @@ export default function MovimientosPage() {
         onSyncComplete={(newTransactions) => console.log(newTransactions)}
       />
 
-      {/* CABECERA CON BOTONES MODERNOS */}
+      {/* CABECERA */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/60 pb-6 pt-2">
         <div className="space-y-1">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold tracking-wide uppercase shadow-sm">
@@ -619,7 +715,7 @@ export default function MovimientosPage() {
         </div>
       </div>
 
-      {/* SELECTOR DE CALENDARIO MODERNO */}
+      {/* SELECTOR DE CALENDARIO */}
       <div className="relative z-40 bg-white/90 dark:bg-slate-900/90 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl backdrop-blur-xl transition-colors">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Button size="sm" variant="outline" onClick={() => setShowDatePicker(!showDatePicker)} className="h-10 px-4 rounded-2xl border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-cyan-600 dark:hover:text-cyan-400 gap-2.5 transition-all cursor-pointer">
@@ -684,48 +780,7 @@ export default function MovimientosPage() {
         </div>
       </div>
 
-      {/* GRÁFICO EXTENDIDO */}
-      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 p-6 backdrop-blur-xl shadow-xl space-y-4 transition-colors">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 pb-3">
-          <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-cyan-600 dark:text-cyan-400 animate-pulse" />
-            <div>
-              <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                Evolución Analítica Contable
-              </h3>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">Ingresos, Gastos Comunes y Cuotas</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 text-[10px] font-bold">
-            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><span className="h-2 w-2 rounded-full bg-emerald-500"></span> Ingresos</span>
-            <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400"><span className="h-2 w-2 rounded-full bg-rose-500"></span> Gastos</span>
-            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><span className="h-2 w-2 rounded-full bg-amber-500"></span> Cuotas</span>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto pb-2 pt-2">
-          <div className="min-w-[650px] relative">
-            <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-44 overflow-visible">
-              <defs>
-                <linearGradient id="lInc" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#10b981" /><stop offset="100%" stopColor="#34d399" /></linearGradient>
-                <linearGradient id="lExp" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f43f5e" /><stop offset="100%" stopColor="#fb7185" /></linearGradient>
-                <linearGradient id="lInst" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f59e0b" /><stop offset="100%" stopColor="#fbbf24" /></linearGradient>
-              </defs>
-
-              {pointsCoords.inc.length > 1 && <path d={pointsCoords.inc.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lInc)" strokeWidth="2.5" />}
-              {pointsCoords.exp.length > 1 && <path d={pointsCoords.exp.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lExp)" strokeWidth="2.5" />}
-              {pointsCoords.inst.length > 1 && <path d={pointsCoords.inst.reduce((acc, pt, i, arr) => i === 0 ? `M ${pt.x},${pt.y}` : `${acc} C ${(arr[i-1].x+pt.x)/2},${arr[i-1].y} ${(arr[i-1].x+pt.x)/2},${pt.y} ${pt.x},${pt.y}`, "")} fill="none" stroke="url(#lInst)" strokeWidth="2.5" />}
-            </svg>
-
-            <div className="flex justify-between px-4 pt-2 border-t border-slate-200 dark:border-slate-800/80">
-              {chartData.map((d, i) => (<span key={i} className="text-[10px] text-slate-500 font-mono text-center flex-1">{d.label}</span>))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* LISTADO DE MOVIMIENTOS CON CHECK DE CUOTAS Y EDICIÓN */}
+      {/* LISTADO DE MOVIMIENTOS CON CHECK DE CUOTAS Y PAGOS PARCIALES */}
       <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 p-6 backdrop-blur-2xl shadow-2xl space-y-4 transition-colors">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-2">
@@ -765,7 +820,7 @@ export default function MovimientosPage() {
                 <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-3 hover:bg-slate-100 dark:hover:bg-slate-950/60 px-3 rounded-2xl transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-800/50">
                   <div className="flex items-start sm:items-center gap-3.5">
                     
-                    {/* Check de Cuotas */}
+                    {/* Check de Pago */}
                     {item.isInstallment && (
                       <button
                         type="button"
@@ -790,7 +845,6 @@ export default function MovimientosPage() {
                         {item.isInstallment && (
                           <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
                             Cuota {item.installmentCurrent}/{item.installmentTotal} {item.isPaid ? "(Pagado)" : "(Pendiente)"}
-                            {item.interestRate ? ` • +${item.interestRate}% mora` : ""}
                           </span>
                         )}
                       </div>
@@ -806,6 +860,11 @@ export default function MovimientosPage() {
                     </span>
 
                     <div className="flex items-center gap-1.5">
+                      {item.isInstallment && !item.isPaid && (
+                        <Button size="sm" variant="outline" onClick={() => { setPartialPaymentItem(item); setPartialAmountInput(String(item.amount)); }} className="h-8 px-2.5 rounded-xl border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold cursor-pointer">
+                          Pago Parcial
+                        </Button>
+                      )}
                       {imgs.length > 0 && (
                         <Button size="icon" variant="ghost" onClick={() => setZoomImageModal(imgs[0])} title="Ver Comprobante" className="h-9 w-9 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10 rounded-xl cursor-pointer">
                           <Eye className="h-4 w-4" />
@@ -880,15 +939,30 @@ export default function MovimientosPage() {
                     onChange={(e) => setIsFiscalInvoice(e.target.value === "fiscal")}
                     className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
                   >
-                    <option value="fiscal">Factura Fiscal (Con CDC / RUC)</option>
                     <option value="common">Gasto Común / Sin Comprobante</option>
+                    <option value="fiscal">Factura Fiscal (Con CDC / RUC)</option>
                   </select>
                 </div>
               </div>
 
-              {/* Monto con teclado numérico */}
+              {editingId && editingItemFull?.isInstallment && (
+                <div className="rounded-2xl border border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20 p-4 space-y-2">
+                  <Label className="text-xs text-blue-700 dark:text-blue-300 font-bold">Alcance de Modificación de Cuotas</Label>
+                  <select
+                    value={editScope}
+                    onChange={(e) => setEditScope(e.target.value as any)}
+                    className="w-full h-9 rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
+                  >
+                    <option value="single">Modificar únicamente esta cuota (Mes en curso)</option>
+                    <option value="global">Modificar en general (Afecta a todo el plan de cuotas)</option>
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Monto Total Principal (₲) *</Label>
+                <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">
+                  {isInstallment && installmentMode === "fixed" ? "Monto Fijo por Cuota (₲) *" : "Monto Total Principal (₲) *"}
+                </Label>
                 <Input
                   type="text"
                   inputMode="numeric"
@@ -899,7 +973,7 @@ export default function MovimientosPage() {
                     const parsed = parsePYG(formAmountInput);
                     if (parsed > 0) setFormAmountInput(formatPYG(parsed));
                   }}
-                  placeholder="Ej: 3.800.000"
+                  placeholder="Ej: 150.000"
                   className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-black text-base px-4 font-mono"
                 />
               </div>
@@ -912,19 +986,46 @@ export default function MovimientosPage() {
                     <input type="checkbox" checked={isInstallment} onChange={(e) => setIsInstallment(e.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-500 cursor-pointer" />
                   </div>
                   {isInstallment && (
-                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-amber-500/20">
+                    <div className="space-y-3 pt-2 border-t border-amber-500/20">
                       <div>
-                        <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">Plazo (Meses)</Label>
-                        <Input type="number" inputMode="numeric" min={2} max={60} value={installmentTotal} onChange={(e) => setInstallmentTotal(e.target.value)} className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
+                        <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">Modalidad de Cuota</Label>
+                        <select
+                          value={installmentMode}
+                          onChange={(e) => setInstallmentMode(e.target.value as any)}
+                          className="w-full h-9 rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
+                        >
+                          <option value="fixed">Monto Fijo Mensual (Sin Interés adicional)</option>
+                          <option value="interest">Monto Total con % de Interés</option>
+                        </select>
                       </div>
-                      <div>
-                        <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">% Interés Total (Ej: 20)</Label>
-                        <Input type="number" inputMode="numeric" min={0} max={100} value={installmentInterest} onChange={(e) => setInstallmentInterest(e.target.value)} placeholder="Ej: 20" className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">Plazo (Meses)</Label>
+                          <Input type="number" inputMode="numeric" min={2} max={60} value={installmentTotal} onChange={(e) => setInstallmentTotal(e.target.value)} className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
+                        </div>
+                        {installmentMode === "interest" && (
+                          <div>
+                            <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">% Interés Total</Label>
+                            <Input type="number" inputMode="numeric" min={0} max={100} value={installmentInterest} onChange={(e) => setInstallmentInterest(e.target.value)} placeholder="Ej: 20" className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
                 </div>
               )}
+
+              {/* CHECK DE PAGO */}
+              <div className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Check de pago</span>
+                <input
+                  type="checkbox"
+                  checked={formIsPaid}
+                  onChange={(e) => setFormIsPaid(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-emerald-500 cursor-pointer"
+                />
+              </div>
 
               {/* Campos fiscales opcionales */}
               {formType === "expense" && isFiscalInvoice && (
@@ -936,7 +1037,7 @@ export default function MovimientosPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Local / Emisor</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej. Banco o Comercio" className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Local / Emisor</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej: Supermercado Stock S.A." className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4" /></div>
                     <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">N° de Factura</Label><Input value={formDocNumber} onChange={(e) => setFormDocNumber(e.target.value)} placeholder="001-001-0001234" className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
                   </div>
 
@@ -946,7 +1047,7 @@ export default function MovimientosPage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Detalle / Concepto Amplio *</Label>
-                <textarea required rows={3} value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Ej: PRESTAMO DE IPAD" className="w-full rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-900 dark:text-slate-100 outline-none resize-none font-medium" />
+                <textarea required rows={3} value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Ej: Compra mensual de mercaderías para stock" className="w-full rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-900 dark:text-slate-100 outline-none resize-none font-medium" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -962,6 +1063,47 @@ export default function MovimientosPage() {
               <div className="flex justify-end gap-3 border-t border-slate-200 dark:border-slate-800 pt-4">
                 <Button type="button" variant="outline" onClick={() => setShowModal(false)} className="rounded-xl border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 h-10 px-4 cursor-pointer">Cancelar</Button>
                 <Button type="submit" disabled={isSubmitting} className="rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white h-10 px-6 cursor-pointer">Confirmar y Guardar</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PAGO PARCIAL / MÍNIMO */}
+      {partialPaymentItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in zoom-in-95">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-7 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-amber-600 dark:text-amber-400 flex items-center gap-2">
+              <CreditCard className="h-5 w-5" /> Informar Pago Mínimo / Parcial
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              Cuota actual: <strong className="font-mono">{formatPYG(partialPaymentItem.amount)} ₲</strong>. Ingresa el monto efectivamente pagado hoy:
+            </p>
+            
+            <form onSubmit={handleSavePaymentModal => { handleSavePaymentModal.preventDefault(); handleSavePartialPayment(handleSavePaymentModal); }} className="space-y-4 text-xs">
+              <Input
+                type="text"
+                inputMode="numeric"
+                required
+                value={partialAmountInput}
+                onChange={(e) => setPartialAmountInput(e.target.value)}
+                placeholder="Ej: 100.000"
+                className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white px-4"
+              />
+
+              <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">¿Acumular saldo restante al siguiente mes?</span>
+                <input
+                  type="checkbox"
+                  checked={accumulateNextMonth}
+                  onChange={(e) => setAccumulateNextMonth(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 text-amber-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <Button type="button" variant="outline" onClick={() => setPartialPaymentItem(null)} className="rounded-xl border-slate-300 dark:border-slate-700 text-xs h-10 px-4 cursor-pointer">Cancelar</Button>
+                <Button type="submit" className="rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs h-10 px-5 cursor-pointer">Registrar Pago Parcial</Button>
               </div>
             </form>
           </div>
