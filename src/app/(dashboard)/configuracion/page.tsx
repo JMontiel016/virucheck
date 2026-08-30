@@ -206,7 +206,6 @@ export default function ConfiguracionPage() {
     setMonedaDestino(temp);
   };
 
-  // Generador dinámico avanzado con variación real única por período (1d, 5d, 1m, 1a)
   const getGoogleFinanceOptions = () => {
     if (!ratesData || divisasSeleccionadas.length === 0) return {};
     const isDark = theme === "dark";
@@ -217,40 +216,39 @@ export default function ConfiguracionPage() {
 
     if (periodoGoogle === "1d") {
       ejeXCategorias = ["08:00", "10:00", "12:00", "14:00", "16:00 (En Vivo)"];
-      oscilacionBase = 0.0008;
+      oscilacionBase = 0.0006;
     } else if (periodoGoogle === "5d") {
       ejeXCategorias = Array.from({ length: 5 }, (_, i) => {
         const d = new Date();
         d.setDate(now.getDate() - (4 - i));
         return d.toLocaleDateString("es-PY", { day: "2-digit", month: "short" });
       });
-      oscilacionBase = 0.0035;
+      oscilacionBase = 0.0025;
     } else if (periodoGoogle === "1m") {
       ejeXCategorias = Array.from({ length: 5 }, (_, i) => {
         const d = new Date();
         d.setDate(now.getDate() - ((4 - i) * 6));
         return d.toLocaleDateString("es-PY", { day: "2-digit", month: "short", year: "numeric" });
       });
-      oscilacionBase = 0.008;
+      oscilacionBase = 0.007;
     } else if (periodoGoogle === "1a") {
       ejeXCategorias = Array.from({ length: 5 }, (_, i) => {
         const d = new Date();
         d.setMonth(now.getMonth() - ((4 - i) * 3));
         return d.toLocaleDateString("es-PY", { month: "short", year: "numeric" });
       });
-      oscilacionBase = 0.025;
+      oscilacionBase = 0.02;
     }
 
     const series = divisasSeleccionadas.map((div, idx) => {
       const basePrice = getPriceInPYG(div);
-      const uniqueSeed = (idx + 1) * 0.7;
+      const hashSeed = (div.charCodeAt(0) + idx * 13) % 7 + 1;
 
-      // Generar una curva de precios dinámicos única para este período y moneda
       const dataPoints = [
-        Number((basePrice * (1 - oscilacionBase * (uniqueSeed * 1.5))).toFixed(2)),
-        Number((basePrice * (1 + oscilacionBase * (uniqueSeed * 0.8))).toFixed(2)),
-        Number((basePrice * (1 - oscilacionBase * (uniqueSeed * 0.3))).toFixed(2)),
-        Number((basePrice * (1 + oscilacionBase * (uniqueSeed * 1.1))).toFixed(2)),
+        Number((basePrice * (1 - oscilacionBase * (hashSeed * 0.3))).toFixed(2)),
+        Number((basePrice * (1 + oscilacionBase * (hashSeed * 0.2))).toFixed(2)),
+        Number((basePrice * (1 - oscilacionBase * (hashSeed * 0.1))).toFixed(2)),
+        Number((basePrice * (1 + oscilacionBase * (hashSeed * 0.4))).toFixed(2)),
         Number(basePrice.toFixed(2)),
       ];
 
@@ -499,7 +497,7 @@ export default function ConfiguracionPage() {
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-8 pb-28 md:pb-12 px-4 sm:px-6 animate-in fade-in duration-300">
+    <div className="w-full max-w-7xl mx-auto space-y-6 pb-28 md:pb-12 px-4 sm:px-6 animate-in fade-in duration-300">
       
       <input ref={fileInputRef} type="file" accept="application/json" onChange={handleImportData} className="hidden" />
 
@@ -526,10 +524,11 @@ export default function ConfiguracionPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* DISEÑO RESPONSIVO ADAPTADO PARA IPAD / TABLETS (Grid fluido lg:grid-cols-3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* COLUMNA PRINCIPAL */}
-        <div className="md:col-span-2 space-y-6">
+        {/* COLUMNA PRINCIPAL (Ocupa 2 columnas en pantallas grandes y tablets horizontales) */}
+        <div className="lg:col-span-2 space-y-6">
           
           {/* APARIENCIA GLOBAL */}
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 shadow-xl transition-colors">
@@ -539,7 +538,7 @@ export default function ConfiguracionPage() {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Apariencia Visual del Sistema</h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Selecciona el modo visual para aplicarlo de forma permanente en todos los módulos</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Selecciona el modo visual para aplicarlo en todos los módulos</p>
               </div>
             </div>
 
@@ -570,7 +569,7 @@ export default function ConfiguracionPage() {
 
           {/* GOOGLE FINANCE: GRÁFICO MULTILÍNEA + TABLA DE MERCADO */}
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 shadow-xl transition-colors space-y-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
                   <TrendingUp className="h-4 w-4" />
@@ -582,7 +581,7 @@ export default function ConfiguracionPage() {
               </div>
 
               {/* Botón de Actualización Manual y Reloj Responsivo */}
-              <div className="flex items-center gap-2 self-start md:self-auto">
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap self-start sm:self-auto">
                 <div className="flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-950 px-3 py-1.5 border border-slate-200 dark:border-slate-800 text-[11px]">
                   <Clock className="h-3.5 w-3.5 text-emerald-500 animate-spin" />
                   <span className="text-slate-600 dark:text-slate-300 font-mono font-medium whitespace-nowrap">Última act: {lastUpdatedTime || "En línea"}</span>
@@ -700,7 +699,7 @@ export default function ConfiguracionPage() {
             </div>
 
             {/* Diseño Flex / Column adaptable para celulares, tablets y notebooks */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3 pt-2 text-xs">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 pt-2 text-xs">
               
               <div className="flex-1 space-y-1.5">
                 <Label className="font-bold text-slate-700 dark:text-slate-300">Monto (Ej: 1.500.000)</Label>
@@ -728,7 +727,7 @@ export default function ConfiguracionPage() {
               </div>
 
               {/* Botón de Intercambio (Swap ⇄) centrado */}
-              <div className="flex justify-center md:pb-0.5">
+              <div className="flex justify-center sm:pb-0.5">
                 <Button
                   type="button"
                   onClick={handleSwapCurrencies}
@@ -909,7 +908,7 @@ export default function ConfiguracionPage() {
           </div>
         </div>
 
-        {/* COLUMNA DERECHA */}
+        {/* COLUMNA DERECHA (Se ubica debajo en iPad/tablets y al lado en pantallas grandes) */}
         <div className="space-y-6">
           
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 shadow-xl transition-colors">
