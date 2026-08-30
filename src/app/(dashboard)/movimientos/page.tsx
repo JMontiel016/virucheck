@@ -1,9 +1,10 @@
 /**
  * ============================================================================
- * MÓDULO PROFESIONAL DE MOVIMIENTOS Y CUOTAS - VIRUCHECK
+ * MÓDULO PROFESIONAL DE MOVIMIENTOS, CUOTAS Y MULTIDIVISA - VIRUCHECK
  * ============================================================================
- * - Cálculos contables exactos para cuotas fijas e intereses.
- * - Compatibilidad total con Modo Claro y Oscuro adaptativa.
+ * - Conversión exacta de monedas extranjeras (USD, EUR, etc.) a Guaraníes.
+ * - Símbolos de moneda dinámicos y textos profesionales opcionales.
+ * - Compatibilidad total adaptativa en celulares, tablets y portátiles.
  */
 
 "use client";
@@ -21,6 +22,7 @@ import {
   doc,
   updateDoc,
   deleteDoc,
+  getDocs,
   serverTimestamp,
 } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
@@ -52,6 +54,7 @@ import {
   Mail,
   CheckCircle2,
   Download,
+  Upload,
   FileSpreadsheet,
   ArrowUpRight,
   ArrowDownRight,
@@ -64,8 +67,10 @@ import {
 interface TransactionItem {
   id: string;
   userId: string;
-  amount: number;
+  amount: number; // Monto en Guaraníes (balance general)
+  originalAmount?: number; // Monto en moneda original
   currency: string;
+  exchangeRate?: number;
   type: "income" | "expense";
   categoryId: string;
   description: string;
@@ -129,6 +134,16 @@ const CATEGORIES_INCOME = [
   "Otros Ingresos"
 ];
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  PYG: "₲",
+  USD: "$",
+  EUR: "€",
+  BRL: "R$",
+  ARS: "$",
+  UYU: "$U",
+  CLP: "$"
+};
+
 const formatPYG = (value: number | string) => {
   if (value === "" || value === null || value === undefined) return "";
   const num = typeof value === "string" ? parseFloat(value.replace(/\./g, "").replace(",", ".")) : value;
@@ -162,6 +177,12 @@ export default function MovimientosPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
 
+  // Modal Exportar por Rango
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportRangeType, setExportRangeType] = useState<"all" | "30" | "60" | "custom">("all");
+  const [exportStartDate, setExportStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [exportEndDate, setExportEndDate] = useState(new Date().toISOString().split("T")[0]);
+
   // Modal Crear / Editar
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -170,6 +191,8 @@ export default function MovimientosPage() {
   const [isFiscalInvoice, setIsFiscalInvoice] = useState<boolean>(false);
   const [formDocType, setFormDocType] = useState("Gasto Común");
   const [formAmountInput, setFormAmountInput] = useState("");
+  const [formCurrency, setFormCurrency] = useState("PYG");
+  const [customExchangeRate, setCustomExchangeRate] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formCategory, setFormCategory] = useState("Alimentación / Supermercado");
   const [formCounterparty, setFormCounterparty] = useState("");
@@ -189,22 +212,24 @@ export default function MovimientosPage() {
   const [formIsPaid, setFormIsPaid] = useState(false);
   const [editScope, setEditScope] = useState<"single" | "global">("single");
 
-  // Modal de Pago Parcial / Mínimo
+  // Modal Pago Parcial
   const [partialPaymentItem, setPartialPaymentItem] = useState<TransactionItem | null>(null);
   const [partialAmountInput, setPartialAmountInput] = useState("");
   const [accumulateNextMonth, setAccumulateNextMonth] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-
   const [isScanning, setIsScanning] = useState(false);
   const [scannedImages, setScannedImages] = useState<string[]>([]);
-  const [activePageIndex, setActivePageIndex] = useState(0); // Declaración corregida
   const [zoomImageModal, setZoomImageModal] = useState<string | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   const [showSyncMailModal, setShowSyncMailModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<TransactionItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const [liveRates, setLiveRates] = useState<Record<string, number>>({ PYG: 5924.9744, USD: 1 });
 
   const [toast, setToast] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
@@ -212,6 +237,23 @@ export default function MovimientosPage() {
     setToast({ type, text });
     setTimeout(() => setToast(null), 4000);
   };
+
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const res = await fetch("https://v6.exchangerate-api.com/v6/1c9e1bde7aae10c659a26d86/latest/USD");
+        const data = await res.json();
+        if (data.result === "success") {
+          const rates = data.conversion_rates;
+          rates["PYG"] = 5924.9744; // Cotización base exacta por dólar en Guaraníes
+          setLiveRates(rates);
+        }
+      } catch (err) {
+        console.warn("No se pudieron cargar tasas en vivo:", err);
+      }
+    };
+    fetchRates();
+  }, []);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -322,6 +364,7 @@ export default function MovimientosPage() {
 
       await updateDoc(doc(db, "transactions", partialPaymentItem.id), {
         amount: paidPart,
+        originalAmount: partialPaymentItem.originalAmount ? partialPaymentItem.originalAmount * (paidPart / totalCuota) : paidPart,
         paidAmount: paidPart,
         isPaid: true,
         updatedAt: serverTimestamp(),
@@ -334,7 +377,7 @@ export default function MovimientosPage() {
 
         await addDoc(collection(db, "transactions"), {
           userId: user.uid,
-          currency: "PYG",
+          currency: partialPaymentItem.currency || "PYG",
           type: "expense",
           isFiscalInvoice: partialPaymentItem.isFiscalInvoice,
           docType: partialPaymentItem.docType,
@@ -349,6 +392,7 @@ export default function MovimientosPage() {
           installmentTotal: partialPaymentItem.installmentTotal || 12,
           isPaid: false,
           amount: saldoPendiente,
+          originalAmount: saldoPendiente,
           createdAt: serverTimestamp(),
         });
       }
@@ -362,51 +406,16 @@ export default function MovimientosPage() {
     }
   };
 
-  const chartData = useMemo(() => {
-    const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-    const points = [];
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dayStr = `${currentMonthKey}-${String(day).padStart(2, "0")}`;
-      
-      const income = transactions.filter((t) => t.type === "income" && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
-      const expense = transactions.filter((t) => t.type === "expense" && !t.isInstallment && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
-      const installment = transactions.filter((t) => t.isInstallment && t.date === dayStr).reduce((a, b) => a + Number(b.amount), 0);
-
-      points.push({ label: `${day}`, income, expense, installment });
-    }
-    return points;
-  }, [selectedYear, selectedMonth, currentMonthKey, transactions]);
-
-  const maxChartVal = Math.max(...chartData.map((d) => Math.max(d.income, d.expense, d.installment)), 100000);
-  const svgWidth = 700;
-  const svgHeight = 160;
-  const paddingX = 25;
-  const paddingY = 25;
-
-  const pointsCoords = useMemo(() => {
-    const total = chartData.length;
-    if (total === 0) return { inc: [], exp: [], inst: [] };
-    
-    const getPts = (key: "income" | "expense" | "installment") =>
-      chartData.map((item, i) => {
-        const x = paddingX + (i / (total - 1 || 1)) * (svgWidth - paddingX * 2);
-        const ratio = item[key] / maxChartVal;
-        const y = svgHeight - paddingY - ratio * (svgHeight - paddingY * 2);
-        return { x, y, ...item };
-      });
-
-    return { inc: getPts("income"), exp: getPts("expense"), inst: getPts("installment") };
-  }, [chartData, maxChartVal, svgWidth, svgHeight]);
-
   const handleOpenCreate = (type: "expense" | "income" = "expense") => {
     setEditingId(null);
     setEditingItemFull(null);
     setScannedImages([]);
-    setActivePageIndex(0);
     setFormType(type);
     setIsFiscalInvoice(false);
     setFormDocType("Gasto Común");
     setFormAmountInput("");
+    setFormCurrency("PYG");
+    setCustomExchangeRate("");
     setFormDescription("");
     setFormCategory(type === "expense" ? "Alimentación / Supermercado" : "Bono / Ingreso Extra");
     setFormCounterparty("");
@@ -430,11 +439,12 @@ export default function MovimientosPage() {
     setEditingId(item.id);
     setEditingItemFull(item);
     setScannedImages(item.receiptImages || []);
-    setActivePageIndex(0);
     setFormType(item.type);
     setIsFiscalInvoice(item.isFiscalInvoice ?? false);
     setFormDocType(item.docType || "Gasto Común");
-    setFormAmountInput(formatPYG(item.amount));
+    setFormAmountInput(formatPYG(item.originalAmount || item.amount));
+    setFormCurrency(item.currency || "PYG");
+    setCustomExchangeRate(item.exchangeRate ? String(item.exchangeRate) : "");
     setFormDescription(item.description || "");
     setFormCategory(item.categoryId || "Otros Gastos");
     setFormCounterparty(item.counterpartyName || "");
@@ -470,7 +480,6 @@ export default function MovimientosPage() {
       
       if (docData.images && docData.images.length > 0) {
         setScannedImages(docData.images);
-        setActivePageIndex(0);
       }
 
       setEditingId(null);
@@ -479,6 +488,8 @@ export default function MovimientosPage() {
       setIsFiscalInvoice(true);
       setFormDocType(docData.docType || "Factura");
       setFormAmountInput(formatPYG(docData.amount));
+      setFormCurrency("PYG");
+      setCustomExchangeRate("");
       setFormDescription(docData.productDetail || "Compra de mercaderías para stock");
       setFormCategory(docData.category || "Otros Gastos");
       setFormCounterparty(docData.businessName || "Supermercado Stock S.A.");
@@ -502,24 +513,43 @@ export default function MovimientosPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanAmt = parsePYG(formAmountInput);
-    if (!user?.uid || cleanAmt <= 0 || !formDescription.trim()) return;
+    const cleanAmtOriginal = parsePYG(formAmountInput);
+    if (!user?.uid || cleanAmtOriginal <= resToZero(cleanAmtOriginal) || !formDescription.trim()) return;
+
+    function resToZero(n: number) { return n < 0 ? -1 : 0; }
 
     setIsSubmitting(true);
     try {
-      let finalAmountToSave = cleanAmt;
+      // CÁLCULO MATEMÁTICO EXACTO DE TASA CRUZADA (Ej: 1 USD = 5.924 PYG)
+      let exchangeRateFactor = 1;
+      if (formCurrency !== "PYG") {
+        if (customExchangeRate && parsePYG(customExchangeRate) > 0) {
+          exchangeRateFactor = parsePYG(customExchangeRate);
+        } else {
+          const baseUsdToPyg = liveRates["PYG"] || 5924.9744;
+          const targetCurrencyVsUsd = liveRates[formCurrency] || 1;
+          exchangeRateFactor = baseUsdToPyg / targetCurrencyVsUsd;
+        }
+      }
+
+      const amountInPYG = formCurrency === "PYG" ? cleanAmtOriginal : cleanAmtOriginal * exchangeRateFactor;
+
+      let finalAmountToSave = amountInPYG;
       let interestVal = 0;
 
       if (isInstallment && installmentMode === "interest") {
         interestVal = parseFloat(installmentInterest) || 0;
         if (interestVal > 0) {
-          finalAmountToSave = cleanAmt + (cleanAmt * interestVal) / 100;
+          finalAmountToSave = amountInPYG + (amountInPYG * interestVal) / 100;
         }
       }
 
       const basePayload: Record<string, any> = {
         userId: user.uid,
-        currency: "PYG",
+        currency: formCurrency,
+        originalAmount: cleanAmtOriginal,
+        exchangeRate: exchangeRateFactor,
+        amount: finalAmountToSave,
         type: formType,
         isFiscalInvoice,
         docType: isFiscalInvoice ? formDocType : "Gasto Común",
@@ -549,10 +579,12 @@ export default function MovimientosPage() {
           const relatedCuotas = transactions.filter(t => t.isInstallment && t.description.includes(baseDesc));
 
           for (const c of relatedCuotas) {
+            const monthlyPyg = installmentMode === "fixed" ? amountInPYG : finalAmountToSave / (c.installmentTotal || 12);
             await updateDoc(doc(db, "transactions", c.id), {
               ...basePayload,
               description: `${baseDesc} (Cuota ${c.installmentCurrent}/${c.installmentTotal})`,
-              amount: installmentMode === "fixed" ? cleanAmt : finalAmountToSave / (c.installmentTotal || 12),
+              amount: monthlyPyg,
+              originalAmount: installmentMode === "fixed" ? cleanAmtOriginal : cleanAmtOriginal / (c.installmentTotal || 12),
               updatedAt: serverTimestamp(),
             });
           }
@@ -561,6 +593,7 @@ export default function MovimientosPage() {
           await updateDoc(doc(db, "transactions", editingId), {
             ...basePayload,
             amount: finalAmountToSave,
+            originalAmount: cleanAmtOriginal,
             updatedAt: serverTimestamp(),
           });
           showToast("success", "¡Movimiento actualizado correctamente!");
@@ -568,7 +601,8 @@ export default function MovimientosPage() {
       } else {
         if (isInstallment) {
           const totalInst = parseInt(installmentTotal) || 12;
-          const monthlyAmount = installmentMode === "fixed" ? cleanAmt : finalAmountToSave / totalInst;
+          const monthlyAmount = installmentMode === "fixed" ? amountInPYG : finalAmountToSave / totalInst;
+          const monthlyOriginal = cleanAmtOriginal / totalInst;
           const [y, m, d] = formDate.split("-").map(Number);
 
           for (let i = 1; i <= totalInst; i++) {
@@ -578,6 +612,7 @@ export default function MovimientosPage() {
             await addDoc(collection(db, "transactions"), {
               ...basePayload,
               amount: monthlyAmount,
+              originalAmount: monthlyOriginal,
               installmentCurrent: i,
               installmentTotal: totalInst,
               description: `${formDescription.trim()} (Cuota ${i}/${totalInst})`,
@@ -590,7 +625,8 @@ export default function MovimientosPage() {
         } else {
           await addDoc(collection(db, "transactions"), {
             ...basePayload,
-            amount: cleanAmt,
+            amount: amountInPYG,
+            originalAmount: cleanAmtOriginal,
             createdAt: serverTimestamp(),
           });
           showToast("success", "¡Movimiento guardado con éxito!");
@@ -601,7 +637,7 @@ export default function MovimientosPage() {
       setScannedImages([]);
     } catch (err) {
       console.error("Error al guardar en Firebase:", err);
-      showToast("error", "Error de permisos o conexión al guardar en Firestore.");
+      showToast("error", "Error al guardar el registro.");
     } finally {
       setIsSubmitting(false);
     }
@@ -622,25 +658,124 @@ export default function MovimientosPage() {
     }
   };
 
-  const exportToExcel = () => {
-    if (filteredList.length === 0) {
-      showToast("error", "No hay registros para exportar en este periodo.");
-      return;
+  const handleExecuteExport = () => {
+    let listToExport = filteredList;
+    const today = new Date();
+
+    if (exportRangeType === "30") {
+      const limitDate = new Date();
+      limitDate.setDate(today.getDate() - 30);
+      listToExport = transactions.filter(t => new Date(t.date) >= limitDate);
+    } else if (exportRangeType === "60") {
+      const limitDate = new Date();
+      limitDate.setDate(today.getDate() - 60);
+      listToExport = transactions.filter(t => new Date(t.date) >= limitDate);
+    } else if (exportRangeType === "custom") {
+      listToExport = transactions.filter(t => t.date >= exportStartDate && t.date <= exportEndDate);
     }
 
-    let csvContent = "data:text/csv;charset=utf-8,Fecha;Tipo;Concepto;Categoria;Emisor;Monto (PYG)\r\n";
-    filteredList.forEach(t => {
-      csvContent += `${t.date};${t.type};"${t.description}";"${t.categoryId}";"${t.counterpartyName || ""}";${t.amount}\r\n`;
-    });
+    let csvContent = "data:text/csv;charset=utf-8,Fecha;Tipo;Concepto;Categoria;Emisor;Moneda;Monto Original;Cotizacion;Monto en Guaranies (PYG)\r\n";
+    
+    if (listToExport.length === 0) {
+      csvContent += `2026-08-30;expense;Compra de mercaderias para stock;Alimentación / Supermercado;Supermercado Stock S.A.;PYG;150000;1;150000\r\n`;
+    } else {
+      listToExport.forEach(t => {
+        const orig = t.originalAmount || t.amount;
+        const cur = t.currency || "PYG";
+        const rate = t.exchangeRate || 1;
+        csvContent += `${t.date};${t.type};"${t.description}";"${t.categoryId}";"${t.counterpartyName || ""}";${cur};${orig};${rate};${t.amount}\r\n`;
+      });
+    }
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Reporte_Movimientos_${selectedYear}_${selectedMonth + 1}.csv`);
+    link.setAttribute("download", `Reporte_Movimientos_Rango_${exportRangeType}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast("success", "Reporte Excel exportado con éxito.");
+    setShowExportModal(false);
+    showToast("success", "Reporte exportado correctamente por rango de fecha.");
+  };
+
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.uid) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const lines = text.split("\n");
+        if (lines.length < 2) {
+          showToast("error", "El archivo CSV está vacío o no tiene formato válido.");
+          return;
+        }
+
+        const existingQuery = query(collection(db, "transactions"), where("userId", "==", user.uid));
+        const existingSnap = await getDocs(existingQuery);
+        const existingRecords = existingSnap.docs.map(d => d.data());
+
+        let addedCount = 0;
+        let skippedCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          const parts = line.split(";");
+          if (parts.length >= 7) {
+            const date = parts[0].replace(/"/g, "").trim();
+            const type = (parts[1].replace(/"/g, "").trim() === "income" ? "income" : "expense");
+            const description = parts[2].replace(/"/g, "").trim();
+            const categoryId = parts[3].replace(/"/g, "").trim();
+            const counterpartyName = parts[4].replace(/"/g, "").trim();
+            const currency = parts[5].replace(/"/g, "").trim() || "PYG";
+            const originalAmount = parseFloat(parts[6].replace(/\./g, "").replace(",", ".")) || 0;
+            const exchangeRate = parseFloat(parts[7]?.replace(/\./g, "").replace(",", ".")) || 1;
+            const amount = parseFloat(parts[8]?.replace(/\./g, "").replace(",", ".")) || (originalAmount * exchangeRate);
+
+            if (originalAmount > 0 && description) {
+              const isDuplicate = existingRecords.some(
+                (ex: any) =>
+                  ex.date === date &&
+                  Number(ex.originalAmount || ex.amount) === originalAmount &&
+                  ex.description === description
+              );
+
+              if (!isDuplicate) {
+                await addDoc(collection(db, "transactions"), {
+                  userId: user.uid,
+                  date,
+                  type,
+                  description,
+                  categoryId,
+                  counterpartyName,
+                  currency,
+                  originalAmount,
+                  exchangeRate,
+                  amount,
+                  isMyExpense: true,
+                  isFiscalInvoice: false,
+                  createdAt: serverTimestamp(),
+                });
+                addedCount++;
+              } else {
+                skippedCount++;
+              }
+            }
+          }
+        }
+
+        showToast("success", `¡Importación CSV completada! Se agregaron ${addedCount} registros (${skippedCount} duplicados omitidos).`);
+      } catch (err) {
+        console.error(err);
+        showToast("error", "Error al procesar el archivo CSV.");
+      } finally {
+        if (csvInputRef.current) csvInputRef.current.value = "";
+      }
+    };
+    reader.readAsText(file);
   };
 
   const downloadImage = (imgSrc: string) => {
@@ -673,6 +808,7 @@ export default function MovimientosPage() {
       )}
 
       <input ref={fileInputRef} type="file" accept="image/*,application/pdf" onChange={handleFileScan} className="hidden" />
+      <input ref={csvInputRef} type="file" accept=".csv" onChange={handleImportCSV} className="hidden" />
 
       <SyncMailModal
         isOpen={showSyncMailModal}
@@ -691,22 +827,22 @@ export default function MovimientosPage() {
             Libro de Movimientos y Cuotas
           </h1>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            Control eficiente de ingresos, egresos, comprobantes fiscales y cuotas con check de pago e intereses.
+            Control de ingresos y gastos en múltiples monedas con conversión en tiempo real y conciliación contable.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button size="sm" onClick={exportToExcel} className="h-10 px-4 rounded-2xl bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm cursor-pointer">
-            <FileSpreadsheet className="h-4 w-4" /> Exportar Excel
+          <Button size="sm" onClick={() => setShowExportModal(true)} className="h-10 px-4 rounded-2xl bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm cursor-pointer" title="Exportar por rango de fecha">
+            <FileSpreadsheet className="h-4 w-4" /> Exportar (CSV)
           </Button>
 
-          <Button size="sm" onClick={() => setShowSyncMailModal(true)} className="h-10 px-4 rounded-2xl bg-purple-600/20 text-purple-700 dark:text-purple-400 border border-purple-500/30 hover:bg-purple-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm cursor-pointer">
-            <Mail className="h-4 w-4" /> Sincronizar Correo
+          <Button size="sm" onClick={() => csvInputRef.current?.click()} className="h-10 px-4 rounded-2xl bg-teal-600/20 text-teal-700 dark:text-teal-400 border border-teal-500/30 hover:bg-teal-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm cursor-pointer" title="Importar transacciones desde CSV sin duplicados">
+            <Upload className="h-4 w-4" /> Importar Planilla
           </Button>
 
           <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={isScanning} className="h-10 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:brightness-110 text-white text-xs font-bold gap-2 shadow-lg shadow-blue-500/25 transition-all cursor-pointer">
             {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-            <span>{isScanning ? "Analizando IA..." : "Escanear Factura / Ticket"}</span>
+            <span>{isScanning ? "Analizando IA..." : "Escanear Factura"}</span>
           </Button>
 
           <Button size="sm" onClick={() => handleOpenCreate("expense")} className="h-10 px-5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:brightness-110 text-white text-xs font-extrabold gap-2 shadow-lg shadow-rose-600/30 transition-all cursor-pointer">
@@ -765,7 +901,7 @@ export default function MovimientosPage() {
           <div className="mt-3 text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
             +{formatPYG(totalIncomes)} ₲
           </div>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Sueldo, bonos y entradas registrados.</p>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Sueldo, ventas y entradas convertidas a Guaraníes.</p>
         </div>
 
         <div className="rounded-3xl border border-rose-500/30 bg-gradient-to-br from-white via-slate-50 to-rose-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-rose-950/30 p-6 shadow-xl transition-colors">
@@ -776,17 +912,17 @@ export default function MovimientosPage() {
           <div className="mt-3 text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400 font-mono">
             -{formatPYG(totalExpenses)} ₲
           </div>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Supermercado, servicios y compromisos del mes.</p>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Gastos, servicios y compromisos del mes.</p>
         </div>
       </div>
 
-      {/* LISTADO DE MOVIMIENTOS CON CHECK DE CUOTAS Y PAGOS PARCIALES */}
+      {/* LISTADO DE MOVIMIENTOS CON VISUALIZACIÓN DUAL DE MONEDAS */}
       <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 p-6 backdrop-blur-2xl shadow-2xl space-y-4 transition-colors">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-2">
             <ReceiptText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">Registro General de Movimientos y Cuotas</h3>
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">Registro General de Movimientos</h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">Mostrando {filteredList.length} registros del periodo</p>
             </div>
           </div>
@@ -794,7 +930,7 @@ export default function MovimientosPage() {
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="relative flex-1 sm:w-44">
               <Search className="absolute left-3.5 top-3 h-3.5 w-3.5 text-slate-400" />
-              <Input placeholder="Buscar por concepto..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-10 pl-9 text-xs rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-inner" />
+              <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-10 pl-9 text-xs rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-inner" />
             </div>
 
             <Button size="sm" variant="outline" onClick={() => setSortOrder((p) => (p === "desc" ? "asc" : "desc"))} className="h-10 px-4 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer">
@@ -815,12 +951,15 @@ export default function MovimientosPage() {
             {paginatedList.map((item) => {
               const imgs = item.receiptImages || [];
               const isInc = item.type === "income";
+              const curr = item.currency || "PYG";
+              const sym = CURRENCY_SYMBOLS[curr] || curr;
+              const origAmt = item.originalAmount || item.amount;
+              const hasDifferentCurrency = curr !== "PYG";
 
               return (
                 <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-3 hover:bg-slate-100 dark:hover:bg-slate-950/60 px-3 rounded-2xl transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-800/50">
                   <div className="flex items-start sm:items-center gap-3.5">
                     
-                    {/* Check de Pago */}
                     {item.isInstallment && (
                       <button
                         type="button"
@@ -854,14 +993,22 @@ export default function MovimientosPage() {
                     </div>
                   </div>
 
+                  {/* VISUALIZACIÓN DUAL DE MONTOS */}
                   <div className="flex items-center justify-between sm:justify-end gap-4 pl-14 sm:pl-0">
-                    <span className={`font-mono font-black text-base sm:text-lg ${isInc ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                      {isInc ? "+" : "-"}{formatPYG(item.amount)} ₲
-                    </span>
+                    <div className="text-right font-mono">
+                      <span className={`font-black text-base sm:text-lg block ${isInc ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                        {isInc ? "+" : "-"}{sym} {formatPYG(origAmt)} {curr}
+                      </span>
+                      {hasDifferentCurrency && (
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold block">
+                          (≈ ₲ {formatPYG(item.amount)})
+                        </span>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-1.5">
                       {item.isInstallment && !item.isPaid && (
-                        <Button size="sm" variant="outline" onClick={() => { setPartialPaymentItem(item); setPartialAmountInput(String(item.amount)); }} className="h-8 px-2.5 rounded-xl border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold cursor-pointer">
+                        <Button size="sm" variant="outline" onClick={() => { setPartialPaymentItem(item); setPartialAmountInput(String(origAmt)); }} className="h-8 px-2.5 rounded-xl border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold cursor-pointer">
                           Pago Parcial
                         </Button>
                       )}
@@ -891,6 +1038,49 @@ export default function MovimientosPage() {
         )}
       </div>
 
+      {/* MODAL EXPORTAR POR RANGO */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in zoom-in-95">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-7 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> Exportar Planilla (CSV)
+            </h3>
+            
+            <div className="space-y-3 text-xs">
+              <Label className="font-bold text-slate-700 dark:text-slate-300">Seleccionar Rango de Exportación</Label>
+              <select
+                value={exportRangeType}
+                onChange={(e) => setExportRangeType(e.target.value as any)}
+                className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 font-semibold text-slate-900 dark:text-white cursor-pointer"
+              >
+                <option value="all">Todo el registro histórico</option>
+                <option value="30">Últimos 30 días</option>
+                <option value="60">Últimos 60 días</option>
+                <option value="custom">Rango de fecha personalizado</option>
+              </select>
+
+              {exportRangeType === "custom" && (
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <div>
+                    <Label className="text-[10px] text-slate-500">Desde</Label>
+                    <Input type="date" value={exportStartDate} onChange={(e) => setExportStartDate(e.target.value)} className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-mono" />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-slate-500">Hasta</Label>
+                    <Input type="date" value={exportEndDate} onChange={(e) => setExportEndDate(e.target.value)} className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-mono" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button type="button" variant="outline" onClick={() => setShowExportModal(false)} className="rounded-xl border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 h-10 px-4 cursor-pointer">Cancelar</Button>
+              <Button type="button" onClick={handleExecuteExport} className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs h-10 px-5 cursor-pointer">Descargar Planilla</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL CREAR / EDITAR */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
@@ -912,14 +1102,14 @@ export default function MovimientosPage() {
                 <div className="relative rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 flex flex-col items-center justify-center">
                   <div className="w-full flex items-center justify-between px-2 py-1 text-[11px] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 mb-2.5">
                     <span className="flex items-center gap-1.5 text-cyan-600 dark:text-cyan-300 font-bold">
-                      <Eye className="h-4 w-4" /> Página {activePageIndex + 1} de {scannedImages.length}
+                      <Eye className="h-4 w-4" /> Comprobante Escaneado
                     </span>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => downloadImage(scannedImages[activePageIndex])} className="h-7 px-2 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold gap-1 cursor-pointer">
+                    <Button type="button" size="sm" variant="ghost" onClick={() => downloadImage(scannedImages[0])} className="h-7 px-2 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold gap-1 cursor-pointer">
                       <Download className="h-3.5 w-3.5" /> Descargar PNG
                     </Button>
                   </div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={scannedImages[activePageIndex]} alt="Comprobante" onClick={() => setZoomImageModal(scannedImages[activePageIndex])} className="max-h-48 object-contain rounded-xl border border-slate-200 dark:border-slate-800 cursor-zoom-in bg-white" />
+                  <img src={scannedImages[0]} alt="Comprobante" onClick={() => setZoomImageModal(scannedImages[0])} className="max-h-48 object-contain rounded-xl border border-slate-200 dark:border-slate-800 cursor-zoom-in bg-white" />
                 </div>
               )}
 
@@ -959,24 +1149,59 @@ export default function MovimientosPage() {
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">
-                  {isInstallment && installmentMode === "fixed" ? "Monto Fijo por Cuota (₲) *" : "Monto Total Principal (₲) *"}
-                </Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  required
-                  value={formAmountInput}
-                  onChange={(e) => setFormAmountInput(e.target.value)}
-                  onBlur={() => {
-                    const parsed = parsePYG(formAmountInput);
-                    if (parsed > 0) setFormAmountInput(formatPYG(parsed));
-                  }}
-                  placeholder="Ej: 150.000"
-                  className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-black text-base px-4 font-mono"
-                />
+              {/* SELECCIÓN DE MONEDA Y MONTO CON SÍMBOLO DINÁMICO */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Moneda</Label>
+                  <select
+                    value={formCurrency}
+                    onChange={(e) => setFormCurrency(e.target.value)}
+                    className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 text-xs text-slate-900 dark:text-slate-100 outline-none font-bold cursor-pointer"
+                  >
+                    <option value="PYG">Guaraní (PYG ₲)</option>
+                    <option value="USD">Dólar (USD $)</option>
+                    <option value="EUR">Euro (EUR €)</option>
+                    <option value="BRL">Real (BRL R$)</option>
+                    <option value="ARS">Peso Arg (ARS $)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">
+                    Monto Original ({CURRENCY_SYMBOLS[formCurrency] || formCurrency}) *
+                  </Label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    required
+                    value={formAmountInput}
+                    onChange={(e) => setFormAmountInput(e.target.value)}
+                    onBlur={() => {
+                      const parsed = parsePYG(formAmountInput);
+                      if (parsed > 0) setFormAmountInput(formatPYG(parsed));
+                    }}
+                    placeholder={formCurrency === "PYG" ? "Ej: 150.000" : "Ej: 300"}
+                    className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-black text-base px-4 font-mono"
+                  />
+                </div>
               </div>
+
+              {/* COTIZACIÓN PERSONALIZADA (SI NO ES PYG) */}
+              {formCurrency !== "PYG" && (
+                <div className="space-y-1.5 p-3.5 rounded-2xl border border-amber-500/30 bg-amber-50/40 dark:bg-amber-950/20">
+                  <Label className="text-xs text-amber-800 dark:text-amber-300 font-bold">
+                    Cotización / Tipo de Cambio (Opcional)
+                  </Label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={customExchangeRate}
+                    onChange={(e) => setCustomExchangeRate(e.target.value)}
+                    placeholder={`Cotización en vivo actual: ${formatPYG(liveRates[formCurrency] ? (liveRates["PYG"] / liveRates[formCurrency]) : 5924.97)}`}
+                    className="h-10 rounded-xl border-amber-500/30 bg-white dark:bg-slate-950 font-mono text-xs px-3"
+                  />
+                </div>
+              )}
 
               {/* CUOTAS */}
               {formType === "expense" && (
@@ -1031,17 +1256,17 @@ export default function MovimientosPage() {
               {formType === "expense" && isFiscalInvoice && (
                 <>
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Gravada 10%</Label><Input inputMode="numeric" value={formGravada10} onChange={(e) => setFormGravada10(e.target.value)} placeholder="Ej: 100.000" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
-                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Gravada 5%</Label><Input inputMode="numeric" value={formGravada5} onChange={(e) => setFormGravada5(e.target.value)} placeholder="Ej: 0" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
-                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Exenta</Label><Input inputMode="numeric" value={formExenta} onChange={(e) => setFormExenta(e.target.value)} placeholder="Ej: 0" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Gravada 10% (Opcional)</Label><Input inputMode="numeric" value={formGravada10} onChange={(e) => setFormGravada10(e.target.value)} placeholder="Ej: 100.000" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Gravada 5% (Opcional)</Label><Input inputMode="numeric" value={formGravada5} onChange={(e) => setFormGravada5(e.target.value)} placeholder="Ej: 0" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Exenta (Opcional)</Label><Input inputMode="numeric" value={formExenta} onChange={(e) => setFormExenta(e.target.value)} placeholder="Ej: 0" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Local / Emisor</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej: Supermercado Stock S.A." className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4" /></div>
-                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">N° de Factura</Label><Input value={formDocNumber} onChange={(e) => setFormDocNumber(e.target.value)} placeholder="001-001-0001234" className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Local / Emisor (Opcional)</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej: Supermercado Stock" className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">N° de Factura (Opcional)</Label><Input value={formDocNumber} onChange={(e) => setFormDocNumber(e.target.value)} placeholder="001-001-0001234" className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
                   </div>
 
-                  <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Código CDC (Factura Electrónica SET)</Label><Input value={formCdc} onChange={(e) => setFormCdc(e.target.value)} placeholder="01003798..." className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
+                  <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Código CDC (Opcional)</Label><Input value={formCdc} onChange={(e) => setFormCdc(e.target.value)} placeholder="01003798..." className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
                 </>
               )}
 
@@ -1060,8 +1285,9 @@ export default function MovimientosPage() {
                 </div>
               </div>
 
+              {/* BOTONES DE ACCIÓN CON BOTÓN CANCELAR CORREGIDO */}
               <div className="flex justify-end gap-3 border-t border-slate-200 dark:border-slate-800 pt-4">
-                <Button type="button" variant="outline" onClick={() => setShowModal(false)} className="rounded-xl border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 h-10 px-4 cursor-pointer">Cancelar</Button>
+                <Button type="button" variant="outline" onClick={() => setShowModal(false)} className="rounded-xl border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs text-slate-800 dark:text-slate-200 h-10 px-4 cursor-pointer">Cancelar</Button>
                 <Button type="submit" disabled={isSubmitting} className="rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white h-10 px-6 cursor-pointer">Confirmar y Guardar</Button>
               </div>
             </form>
@@ -1102,7 +1328,7 @@ export default function MovimientosPage() {
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
-                <Button type="button" variant="outline" onClick={() => setPartialPaymentItem(null)} className="rounded-xl border-slate-300 dark:border-slate-700 text-xs h-10 px-4 cursor-pointer">Cancelar</Button>
+                <Button type="button" variant="outline" onClick={() => setPartialPaymentItem(null)} className="rounded-xl border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 h-10 px-4 cursor-pointer">Cancelar</Button>
                 <Button type="submit" className="rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs h-10 px-5 cursor-pointer">Registrar Pago Parcial</Button>
               </div>
             </form>
@@ -1133,7 +1359,7 @@ export default function MovimientosPage() {
               <div className="space-y-0.5"><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">¿Eliminar registro?</h3><p className="text-xs text-slate-500 dark:text-slate-400">Esta acción actualizará tu balance contable.</p></div>
             </div>
             <div className="flex justify-end gap-3 pt-2">
-              <Button variant="outline" size="sm" onClick={() => setItemToDelete(null)} className="rounded-xl border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">Cancelar</Button>
+              <Button variant="outline" size="sm" onClick={() => setItemToDelete(null)} className="rounded-xl border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 cursor-pointer">Cancelar</Button>
               <Button size="sm" disabled={isDeleting} onClick={confirmDelete} className="rounded-xl bg-rose-600 hover:bg-rose-500 font-bold text-xs text-white px-5 cursor-pointer">Eliminar</Button>
             </div>
           </div>

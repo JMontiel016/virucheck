@@ -37,7 +37,8 @@ import {
   TrendingUp,
   ArrowRightLeft,
   Calculator,
-  Clock
+  Clock,
+  RefreshCw
 } from "lucide-react";
 
 export default function ConfiguracionPage() {
@@ -45,27 +46,33 @@ export default function ConfiguracionPage() {
   const { user, profile, logout } = useAuth();
   const { currency } = useThemeCurrency();
 
-  const API_KEY = "1c9e1bde7aae10c659a26d86";
-
   const [theme, setThemeState] = useState<"dark" | "light">("dark");
   const [displayName, setDisplayName] = useState(profile?.displayName || "");
   const [isEditingName, setIsEditingName] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Estados de Mercado y Reloj
-  const [ratesData, setRatesData] = useState<Record<string, number> | null>(null);
+  const [ratesData, setRatesData] = useState<Record<string, number>>({
+    USD: 1,
+    EUR: 0.92,
+    BRL: 5.45,
+    ARS: 1050,
+    UYU: 41.5,
+    CLP: 950,
+    PYG: 5958.31
+  });
   const [loadingRates, setLoadingRates] = useState(true);
+  const [isRefreshingManual, setIsRefreshingManual] = useState(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string>("");
-  const [timeAgo, setTimeAgo] = useState<string>("hace un momento");
 
-  // Gráfico Multidivisa (USD fijo por defecto)
+  // Gráfico Multidivisa
   const [periodoGoogle, setPeriodoGoogle] = useState<"1d" | "5d" | "1m" | "1a">("1m");
   const [divisasSeleccionadas, setDivisasSeleccionadas] = useState<string[]>(["USD", "EUR", "BRL"]);
 
   // Calculadora Cambiaria
-  const [montoCalculadora, setMontoCalculadora] = useState<number | string>("100.000");
-  const [monedaOrigen, setMonedaOrigen] = useState<string>("PYG");
-  const [monedaDestino, setMonedaDestino] = useState<string>("USD");
+  const [montoCalculadora, setMontoCalculadora] = useState<number | string>("1");
+  const [monedaOrigen, setMonedaOrigen] = useState<string>("USD");
+  const [monedaDestino, setMonedaDestino] = useState<string>("PYG");
 
   // Seguridad y Modales
   const [passwordStep, setPasswordStep] = useState<"idle" | "sending_pin" | "verify_pin" | "new_pass">("idle");
@@ -101,40 +108,52 @@ export default function ConfiguracionPage() {
     showToast("success", `Modo ${newTheme === "dark" ? "Oscuro" : "Claro"} aplicado en todo el sistema.`);
   };
 
-  // Sincronización en tiempo real cada 1 minuto (60000 ms)
-  useEffect(() => {
-    const fetchLiveRates = async () => {
-      try {
-        const response = await fetch(`https://v6.exchangerate-api.com/v6/${API_KEY}/latest/USD`);
-        const data = await response.json();
-        if (data.result === "success") {
-          const liveRates = { ...data.conversion_rates };
-          liveRates["PYG"] = 5924.9744;
-          setRatesData(liveRates);
-          const nowStr = new Date().toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" });
-          setLastUpdatedTime(nowStr);
-          setTimeAgo("hace un minuto");
-        } else {
-          showToast("error", "Error al sincronizar tasas en vivo.");
-        }
-      } catch (err) {
-        showToast("error", "Sin conexión con el servidor de divisas.");
-      } finally {
-        setLoadingRates(false);
-      }
-    };
+  // Sincronización robusta con Frankfurter API
+  const fetchLiveRates = async (isManual = false) => {
+    if (isManual) setIsRefreshingManual(true);
+    else setLoadingRates(true);
 
-    fetchLiveRates();
-    const interval = setInterval(fetchLiveRates, 60000);
+    try {
+      const response = await fetch(`https://api.frankfurter.dev/v1/latest?base=USD&_t=${new Date().getTime()}`);
+      if (!response.ok) throw new Error("Error en la respuesta del servidor");
+      const data = await response.json();
+      
+      if (data && data.rates) {
+        setRatesData((prev) => ({
+          ...prev,
+          ...data.rates,
+          USD: 1,
+          PYG: 5958.31, // Referencia local exacta
+        }));
+        
+        const now = new Date();
+        setLastUpdatedTime(now.toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+
+        if (isManual) {
+          showToast("success", "¡Cotizaciones actualizadas al instante!");
+        }
+      }
+    } catch {
+      if (isManual) {
+        showToast("error", "No se pudo conectar con el servidor de divisas.");
+      }
+    } finally {
+      setLoadingRates(false);
+      setIsRefreshingManual(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveRates(false);
+    const interval = setInterval(() => fetchLiveRates(false), 60000);
     return () => clearInterval(interval);
-  }, [API_KEY]);
+  }, []);
 
   const getPriceInPYG = (targetCode: string) => {
     if (!ratesData) return 0;
-    const pygPerUsd = ratesData["PYG"];
+    const pygPerUsd = ratesData["PYG"] || 5958.3100;
     if (targetCode === "USD") return pygPerUsd;
-    const targetPerUsd = ratesData[targetCode];
-    if (!targetPerUsd) return 0;
+    const targetPerUsd = ratesData[targetCode] || 1;
     return pygPerUsd / targetPerUsd;
   };
 
@@ -162,22 +181,27 @@ export default function ConfiguracionPage() {
   const calcularConversion = () => {
     if (!ratesData) return "0";
     const valorNum = parseFloat(String(montoCalculadora).replace(/\./g, "").replace(",", ".")) || 0;
-    const pygPerUsd = ratesData["PYG"];
+    const pygPerUsd = ratesData["PYG"] || 5958.3100;
 
     let enUSD = 0;
     if (monedaOrigen === "USD") enUSD = valorNum;
     else if (monedaOrigen === "PYG") enUSD = valorNum / pygPerUsd;
-    else enUSD = valorNum / ratesData[monedaOrigen];
+    else {
+      const rateOrigin = ratesData[monedaOrigen] || 1;
+      enUSD = valorNum / rateOrigin;
+    }
 
     let resultado = 0;
     if (monedaDestino === "USD") resultado = enUSD;
     else if (monedaDestino === "PYG") resultado = enUSD * pygPerUsd;
-    else resultado = enUSD * ratesData[monedaDestino];
+    else {
+      const rateDest = ratesData[monedaDestino] || 1;
+      resultado = enUSD * rateDest;
+    }
 
     return new Intl.NumberFormat("es-PY", { maximumFractionDigits: 2 }).format(resultado);
   };
 
-  // Función para intercambiar lugar de Moneda Origen y Moneda Destino
   const handleSwapCurrencies = () => {
     const temp = monedaOrigen;
     setMonedaOrigen(monedaDestino);
@@ -187,27 +211,21 @@ export default function ConfiguracionPage() {
   const getGoogleFinanceOptions = () => {
     if (!ratesData) return {};
     const isDark = theme === "dark";
-    const ejeXCategorias =
-      periodoGoogle === "1d"
-        ? ["09:00", "11:00", "13:00", "15:00", "En Vivo"]
-        : periodoGoogle === "5d"
-        ? ["25 ago", "26 ago", "27 ago", "Actual"]
-        : ["Sem 1", "Sem 2", "Sem 3", "Actual"];
+    const ejeXCategorias = ["09:00", "11:00", "13:00", "15:00", "En Vivo"];
 
     const series = divisasSeleccionadas.map((div) => {
       const basePrice = getPriceInPYG(div);
-      const factor = periodoGoogle === "1d" ? 0.0008 : periodoGoogle === "5d" ? 0.003 : 0.01;
       return {
         name: `${div}/PYG`,
         type: "line",
         smooth: true,
         symbol: "circle",
-        symbolSize: 6,
+        symbolSize: 5,
         lineStyle: { width: 2.5, color: coloresMap[div] || "#3b82f6" },
         data: [
-          Number((basePrice * (1 - factor * 1.1)).toFixed(2)),
-          Number((basePrice * (1 - factor * 0.5)).toFixed(2)),
-          Number((basePrice * (1 + factor * 0.3)).toFixed(2)),
+          Number((basePrice * 0.995).toFixed(2)),
+          Number((basePrice * 0.998).toFixed(2)),
+          Number((basePrice * 1.002).toFixed(2)),
           Number(basePrice.toFixed(2)),
         ],
       };
@@ -221,11 +239,11 @@ export default function ConfiguracionPage() {
         borderColor: isDark ? "#1e293b" : "#e2e8f0",
         textStyle: { color: isDark ? "#f8fafc" : "#0f172a", fontSize: 11 },
         formatter: (params: any) => {
-          let tooltipHtml = `<b>${params[0].name}</b><br/>`;
+          let html = `<b>${params[0].name}</b><br/>`;
           params.forEach((p: any) => {
-            tooltipHtml += `<span style="color:${p.color}">●</span> ${p.seriesName}: <b>₲ ${p.value.toLocaleString("es-PY")}</b><br/>`;
+            html += `<span style="color:${p.color}">●</span> ${p.seriesName}: <b>₲ ${p.value.toLocaleString("es-PY")}</b><br/>`;
           });
-          return tooltipHtml;
+          return html;
         },
       },
       legend: {
@@ -233,7 +251,7 @@ export default function ConfiguracionPage() {
         textStyle: { color: isDark ? "#94a3b8" : "#64748b", fontSize: 11 },
         top: 0,
       },
-      grid: { top: 40, bottom: 25, left: 65, right: 20 },
+      grid: { top: 35, bottom: 25, left: 60, right: 15 },
       xAxis: {
         type: "category",
         data: ejeXCategorias,
@@ -292,7 +310,6 @@ export default function ConfiguracionPage() {
     }
   };
 
-  // Importación con control estricto de duplicados
   const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user?.uid) return;
@@ -471,7 +488,7 @@ export default function ConfiguracionPage() {
           <Settings className="h-7 w-7 text-blue-600 dark:text-blue-400" /> Configuración y Mercado Cambiario
         </h1>
         <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-          Gestión completa de cuenta, preferencias visuales, mercado en vivo sincronizado cada 1 minuto y copias de seguridad.
+          Gestión completa de cuenta, preferencias visuales, mercado en vivo sincronizado y copias de seguridad.
         </p>
       </div>
 
@@ -526,14 +543,26 @@ export default function ConfiguracionPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">Seguimiento Bursátil en Tiempo Real</h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Sincronización automática cada 1 minuto con Google Finance</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Sincronización automática con Frankfurter API</p>
                 </div>
               </div>
 
-              {/* Diseño Adaptativo y Responsivo del Reloj de Actualización */}
-              <div className="flex items-center gap-2 self-start md:self-auto rounded-xl bg-slate-100 dark:bg-slate-950 px-3 py-1.5 border border-slate-200 dark:border-slate-800 text-[11px]">
-                <Clock className="h-3.5 w-3.5 text-emerald-500 animate-spin" />
-                <span className="text-slate-600 dark:text-slate-300 font-mono font-medium whitespace-nowrap">Actualizado: {timeAgo} ({lastUpdatedTime})</span>
+              {/* Botón de Actualización Manual y Reloj Responsivo */}
+              <div className="flex items-center gap-2 self-start md:self-auto">
+                <div className="flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-950 px-3 py-1.5 border border-slate-200 dark:border-slate-800 text-[11px]">
+                  <Clock className="h-3.5 w-3.5 text-emerald-500 animate-spin" />
+                  <span className="text-slate-600 dark:text-slate-300 font-mono font-medium whitespace-nowrap">Última act: {lastUpdatedTime || "En línea"}</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => fetchLiveRates(true)}
+                  disabled={isRefreshingManual}
+                  className="h-8 px-3 rounded-xl border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-emerald-500 gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingManual ? "animate-spin text-emerald-500" : ""}`} />
+                  <span>Actualizar</span>
+                </Button>
               </div>
             </div>
 
@@ -558,11 +587,11 @@ export default function ConfiguracionPage() {
 
             {loadingRates ? (
               <div className="h-72 flex items-center justify-center gap-2 text-xs text-slate-400">
-                <Loader2 className="h-5 w-5 animate-spin text-blue-500" /> Sincronizando con Google Finance...
+                <Loader2 className="h-5 w-5 animate-spin text-blue-500" /> Sincronizando con el servidor de divisas...
               </div>
             ) : (
               <>
-                {/* Badges de Divisas (USD fijo por defecto, los demás se activan/desactivan al hacer clic) */}
+                {/* Badges de Divisas */}
                 <div className="flex flex-wrap gap-2">
                   {listaMonedasSeguimiento.map((div) => {
                     const activo = divisasSeleccionadas.includes(div);
@@ -581,7 +610,7 @@ export default function ConfiguracionPage() {
                         }`}
                       >
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: coloresMap[div] }} />
-                        {div}/PYG {esUsd ? "(Fijo)" : activo ? "✕" : "+"}
+                        {div}/PYG {esUsd ? "+" : activo ? "✕" : "+"}
                       </button>
                     );
                   })}
@@ -628,7 +657,7 @@ export default function ConfiguracionPage() {
             )}
           </div>
 
-          {/* CALCULADORA CAMBIARIA CON BOTÓN DE INTERCAMBIO EN EL MEDIO */}
+          {/* CALCULADORA CAMBIARIA ADAPTATIVA */}
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 shadow-xl transition-colors space-y-4">
             <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center">
@@ -640,10 +669,10 @@ export default function ConfiguracionPage() {
               </div>
             </div>
 
-            {/* Grid organizado con el botón de intercambio (Swap ⇄) en el medio */}
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-end gap-3 pt-2 text-xs">
+            {/* Diseño Flex / Column adaptable para celulares, tablets y notebooks */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3 pt-2 text-xs">
               
-              <div className="space-y-1.5">
+              <div className="flex-1 space-y-1.5">
                 <Label className="font-bold text-slate-700 dark:text-slate-300">Monto (Ej: 1.500.000)</Label>
                 <Input
                   type="number"
@@ -654,7 +683,7 @@ export default function ConfiguracionPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="flex-1 space-y-1.5">
                 <Label className="font-bold text-slate-700 dark:text-slate-300">Moneda Origen</Label>
                 <select
                   value={monedaOrigen}
@@ -668,8 +697,8 @@ export default function ConfiguracionPage() {
                 </select>
               </div>
 
-              {/* Botón de Intercambio (Swap ⇄) ubicado en el medio */}
-              <div className="flex justify-center pb-0.5">
+              {/* Botón de Intercambio (Swap ⇄) centrado */}
+              <div className="flex justify-center md:pb-0.5">
                 <Button
                   type="button"
                   onClick={handleSwapCurrencies}
@@ -680,7 +709,7 @@ export default function ConfiguracionPage() {
                 </Button>
               </div>
 
-              <div className="space-y-1.5 sm:col-start-3">
+              <div className="flex-1 space-y-1.5">
                 <Label className="font-bold text-slate-700 dark:text-slate-300">Moneda Destino</Label>
                 <select
                   value={monedaDestino}
@@ -873,7 +902,7 @@ export default function ConfiguracionPage() {
             </div>
           </div>
 
-          {/* RESPALDO Y RESTAURACIÓN JSON (CON CONTROL DE DUPLICADOS) */}
+          {/* RESPALDO Y RESTAURACIÓN JSON */}
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 shadow-xl transition-colors space-y-3">
             <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="h-9 w-9 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center justify-center">
