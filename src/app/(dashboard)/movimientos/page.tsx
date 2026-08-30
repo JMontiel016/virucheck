@@ -51,17 +51,14 @@ import {
   Laptop,
   ChevronLeft,
   ChevronRight,
-  Mail,
   CheckCircle2,
   Download,
   Upload,
   FileSpreadsheet,
   ArrowUpRight,
   ArrowDownRight,
-  Activity,
   CalendarIcon,
-  CreditCard,
-  Percent
+  CreditCard
 } from "lucide-react";
 
 interface TransactionItem {
@@ -245,7 +242,7 @@ export default function MovimientosPage() {
         const data = await res.json();
         if (data.result === "success") {
           const rates = data.conversion_rates;
-          rates["PYG"] = 5924.9744; // Cotización base exacta por dólar en Guaraníes
+          rates["PYG"] = 5924.9744;
           setLiveRates(rates);
         }
       } catch (err) {
@@ -514,13 +511,10 @@ export default function MovimientosPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanAmtOriginal = parsePYG(formAmountInput);
-    if (!user?.uid || cleanAmtOriginal <= resToZero(cleanAmtOriginal) || !formDescription.trim()) return;
-
-    function resToZero(n: number) { return n < 0 ? -1 : 0; }
+    if (!user?.uid || cleanAmtOriginal <= 0 || !formDescription.trim()) return;
 
     setIsSubmitting(true);
     try {
-      // CÁLCULO MATEMÁTICO EXACTO DE TASA CRUZADA (Ej: 1 USD = 5.924 PYG)
       let exchangeRateFactor = 1;
       if (formCurrency !== "PYG") {
         if (customExchangeRate && parsePYG(customExchangeRate) > 0) {
@@ -795,15 +789,15 @@ export default function MovimientosPage() {
   const availableYears = Array.from({ length: 16 }, (_, i) => 2020 + i);
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-6 pb-28 md:pb-12 px-4 sm:px-6 animate-in fade-in duration-300">
+    <div className="w-full max-w-7xl mx-auto space-y-6 pb-28 md:pb-12 px-3 sm:px-6 animate-in fade-in duration-300 overflow-x-hidden">
       
       {/* ALERTA TOAST FLOTANTE */}
       {toast && (
-        <div className={`fixed top-6 right-6 z-50 flex items-center gap-2.5 rounded-2xl border px-5 py-4 text-xs shadow-2xl backdrop-blur-xl animate-in slide-in-from-top-5 ${
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2.5 rounded-2xl border px-4 py-3 text-xs shadow-2xl backdrop-blur-xl animate-in slide-in-from-top-5 max-w-[90vw] ${
           toast.type === "error" ? "border-red-500/30 bg-red-950/90 text-red-300" : "border-emerald-500/30 bg-emerald-950/90 text-emerald-300"
         }`}>
           {toast.type === "error" ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
-          <span className="font-bold">{toast.text}</span>
+          <span className="font-bold break-words">{toast.text}</span>
         </div>
       )}
 
@@ -817,72 +811,73 @@ export default function MovimientosPage() {
         onSyncComplete={(newTransactions) => console.log(newTransactions)}
       />
 
-      {/* CABECERA */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/60 pb-6 pt-2">
+      {/* CABECERA ADAPTATIVA */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/60 pb-6 pt-2">
         <div className="space-y-1">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-xs font-bold tracking-wide uppercase shadow-sm">
-            <Sparkles className="h-3.5 w-3.5" /> Módulo Financiero Avanzado
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 text-[11px] font-bold tracking-wide uppercase shadow-sm">
+            <Sparkles className="h-3 w-3" /> Módulo Financiero Avanzado
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
             Libro de Movimientos y Cuotas
           </h1>
-          <p className="text-xs text-slate-600 dark:text-slate-400">
+          <p className="text-xs text-slate-600 dark:text-slate-400 max-w-2xl">
             Control de ingresos y gastos en múltiples monedas con conversión en tiempo real y conciliación contable.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button size="sm" onClick={() => setShowExportModal(true)} className="h-10 px-4 rounded-2xl bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm cursor-pointer" title="Exportar por rango de fecha">
-            <FileSpreadsheet className="h-4 w-4" /> Exportar (CSV)
+        {/* BOTONERA SUPERIOR ADAPTADA A TABLETS Y MOVILES */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => setShowExportModal(true)} className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-[11px] sm:text-xs font-bold gap-1.5 transition-all shadow-sm cursor-pointer">
+            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /> Exportar (CSV)
           </Button>
 
-          <Button size="sm" onClick={() => csvInputRef.current?.click()} className="h-10 px-4 rounded-2xl bg-teal-600/20 text-teal-700 dark:text-teal-400 border border-teal-500/30 hover:bg-teal-600 hover:text-white text-xs font-bold gap-2 transition-all shadow-sm cursor-pointer" title="Importar transacciones desde CSV sin duplicados">
-            <Upload className="h-4 w-4" /> Importar Planilla
+          <Button size="sm" onClick={() => csvInputRef.current?.click()} className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-teal-600/20 text-teal-700 dark:text-teal-400 border border-teal-500/30 hover:bg-teal-600 hover:text-white text-[11px] sm:text-xs font-bold gap-1.5 transition-all shadow-sm cursor-pointer">
+            <Upload className="h-3.5 w-3.5 shrink-0" /> Importar Planilla
           </Button>
 
-          <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={isScanning} className="h-10 px-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:brightness-110 text-white text-xs font-bold gap-2 shadow-lg shadow-blue-500/25 transition-all cursor-pointer">
-            {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
-            <span>{isScanning ? "Analizando IA..." : "Escanear Factura"}</span>
+          <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={isScanning} className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:brightness-110 text-white text-[11px] sm:text-xs font-bold gap-1.5 shadow-md shadow-blue-500/25 transition-all cursor-pointer">
+            {isScanning ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : <Camera className="h-3.5 w-3.5 shrink-0" />}
+            <span className="truncate">{isScanning ? "Analizando..." : "Escanear"}</span>
           </Button>
 
-          <Button size="sm" onClick={() => handleOpenCreate("expense")} className="h-10 px-5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:brightness-110 text-white text-xs font-extrabold gap-2 shadow-lg shadow-rose-600/30 transition-all cursor-pointer">
-            <PlusCircle className="h-4 w-4" /> Nuevo Movimiento
+          <Button size="sm" onClick={() => handleOpenCreate("expense")} className="col-span-2 sm:col-span-1 h-9 sm:h-10 px-4 sm:px-5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:brightness-110 text-white text-[11px] sm:text-xs font-extrabold gap-1.5 shadow-md shadow-rose-600/30 transition-all cursor-pointer">
+            <PlusCircle className="h-3.5 w-3.5 shrink-0" /> Nuevo Movimiento
           </Button>
         </div>
       </div>
 
-      {/* SELECTOR DE CALENDARIO */}
-      <div className="relative z-40 bg-white/90 dark:bg-slate-900/90 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl backdrop-blur-xl transition-colors">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button size="sm" variant="outline" onClick={() => setShowDatePicker(!showDatePicker)} className="h-10 px-4 rounded-2xl border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-cyan-600 dark:hover:text-cyan-400 gap-2.5 transition-all cursor-pointer">
-            <CalendarIcon className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+      {/* SELECTOR DE CALENDARIO Y PERIODO */}
+      <div className="relative z-30 bg-white/90 dark:bg-slate-900/90 p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl backdrop-blur-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <Button size="sm" variant="outline" onClick={() => setShowDatePicker(!showDatePicker)} className="h-9 sm:h-10 px-4 rounded-xl sm:rounded-2xl border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-cyan-600 dark:hover:text-cyan-400 gap-2 transition-all cursor-pointer w-full sm:w-auto justify-center">
+            <CalendarIcon className="h-4 w-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
             <span>{monthNames[selectedMonth]} {selectedYear}</span>
           </Button>
 
-          <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-950 px-3 py-1.5 rounded-2xl border border-slate-200 dark:border-slate-800">
-            <Button size="icon" variant="ghost" onClick={() => { if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(prev => prev - 1); } else { setSelectedMonth(prev => prev - 1); } }} className="h-7 w-7 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer">
+          <div className="flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-950 px-3 py-1.5 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800">
+            <Button size="icon" variant="ghost" onClick={() => { if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(prev => prev - 1); } else { setSelectedMonth(prev => prev - 1); } }} className="h-7 w-7 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 px-2 min-w-[90px] text-center">
+            <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 px-2 min-w-[85px] text-center">
               {shortMonthNames[selectedMonth]} {selectedYear}
             </span>
-            <Button size="icon" variant="ghost" onClick={() => { if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(prev => prev + 1); } else { setSelectedMonth(selectedMonth + 1); } }} className="h-7 w-7 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer">
+            <Button size="icon" variant="ghost" onClick={() => { if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(prev => prev + 1); } else { setSelectedMonth(selectedMonth + 1); } }} className="h-7 w-7 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 cursor-pointer">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
         {showDatePicker && (
-          <div className="mt-4 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 shadow-2xl z-50 absolute top-full left-0 w-full sm:w-80 backdrop-blur-2xl">
+          <div className="mt-3 p-4 rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 shadow-2xl z-40 absolute top-full left-4 right-4 sm:left-auto sm:w-80 backdrop-blur-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 mb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Seleccionar Periodo</span>
               <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} className="h-8 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 px-3 text-xs text-cyan-600 dark:text-cyan-400 font-bold font-mono outline-none cursor-pointer">
                 {availableYears.map(yr => (<option key={yr} value={yr}>{yr}</option>))}
               </select>
             </div>
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {shortMonthNames.map((name, idx) => (
-                <button key={name} onClick={() => { setSelectedMonth(idx); setShowDatePicker(false); }} className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${idx === selectedMonth ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg" : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800"}`}>
+                <button key={name} onClick={() => { setSelectedMonth(idx); setShowDatePicker(false); }} className={`py-2 px-1 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${idx === selectedMonth ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md" : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800"}`}>
                   {name}
                 </button>
               ))}
@@ -891,50 +886,50 @@ export default function MovimientosPage() {
         )}
       </div>
 
-      {/* TARJETAS RESUMEN */}
+      {/* TARJETAS RESUMEN RESPONSIVAS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-emerald-950/30 p-6 shadow-xl transition-colors">
+        <div className="rounded-2xl sm:rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-emerald-950/30 p-5 sm:p-6 shadow-xl transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Total Ingresos del Mes</span>
-            <div className="rounded-2xl bg-emerald-500/10 p-2.5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"><ArrowUpRight className="h-4 w-4" /></div>
+            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Total Ingresos del Mes</span>
+            <div className="rounded-xl sm:rounded-2xl bg-emerald-500/10 p-2 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"><ArrowUpRight className="h-4 w-4" /></div>
           </div>
-          <div className="mt-3 text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+          <div className="mt-2 text-xl sm:text-2xl md:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight break-all">
             +{formatPYG(totalIncomes)} ₲
           </div>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Sueldo, ventas y entradas convertidas a Guaraníes.</p>
+          <p className="mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400">Sueldo, ventas y entradas convertidas a Guaraníes.</p>
         </div>
 
-        <div className="rounded-3xl border border-rose-500/30 bg-gradient-to-br from-white via-slate-50 to-rose-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-rose-950/30 p-6 shadow-xl transition-colors">
+        <div className="rounded-2xl sm:rounded-3xl border border-rose-500/30 bg-gradient-to-br from-white via-slate-50 to-rose-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-rose-950/30 p-5 sm:p-6 shadow-xl transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Total Gastos y Cuotas</span>
-            <div className="rounded-2xl bg-rose-500/10 p-2.5 text-rose-600 dark:text-rose-400 border border-rose-500/20"><ArrowDownRight className="h-4 w-4" /></div>
+            <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Total Gastos y Cuotas</span>
+            <div className="rounded-xl sm:rounded-2xl bg-rose-500/10 p-2 text-rose-600 dark:text-rose-400 border border-rose-500/20"><ArrowDownRight className="h-4 w-4" /></div>
           </div>
-          <div className="mt-3 text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400 font-mono">
+          <div className="mt-2 text-xl sm:text-2xl md:text-3xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tight break-all">
             -{formatPYG(totalExpenses)} ₲
           </div>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Gastos, servicios y compromisos del mes.</p>
+          <p className="mt-1 text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400">Gastos, servicios y compromisos del mes.</p>
         </div>
       </div>
 
-      {/* LISTADO DE MOVIMIENTOS CON VISUALIZACIÓN DUAL DE MONEDAS */}
-      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 p-6 backdrop-blur-2xl shadow-2xl space-y-4 transition-colors">
+      {/* LISTADO DE MOVIMIENTOS Y FILTROS */}
+      <div className="rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 p-4 sm:p-6 backdrop-blur-2xl shadow-2xl space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
-          <div className="flex items-center gap-2">
-            <ReceiptText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <div className="flex items-center gap-2.5">
+            <ReceiptText className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
             <div>
               <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">Registro General de Movimientos</h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">Mostrando {filteredList.length} registros del periodo</p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="relative flex-1 sm:w-44">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <div className="relative w-full sm:w-48">
               <Search className="absolute left-3.5 top-3 h-3.5 w-3.5 text-slate-400" />
-              <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-10 pl-9 text-xs rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-inner" />
+              <Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-9 sm:h-10 pl-9 text-xs rounded-xl sm:rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 shadow-inner" />
             </div>
 
-            <Button size="sm" variant="outline" onClick={() => setSortOrder((p) => (p === "desc" ? "asc" : "desc"))} className="h-10 px-4 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer">
-              <ArrowUpDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 mr-1.5" />
+            <Button size="sm" variant="outline" onClick={() => setSortOrder((p) => (p === "desc" ? "asc" : "desc"))} className="h-9 sm:h-10 px-4 rounded-xl sm:rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer justify-center">
+              <ArrowUpDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 mr-1.5 shrink-0" />
               {sortOrder === "desc" ? "Nuevos" : "Antiguos"}
             </Button>
           </div>
@@ -943,7 +938,7 @@ export default function MovimientosPage() {
         {loading ? (
           <div className="py-16 flex justify-center items-center"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div>
         ) : filteredList.length === 0 ? (
-          <div className="py-16 text-center text-xs text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-slate-800 rounded-3xl space-y-2 bg-slate-50 dark:bg-slate-950/30">
+          <div className="py-16 text-center text-xs text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-slate-800 rounded-2xl sm:rounded-3xl space-y-2 bg-slate-50 dark:bg-slate-950/30">
             <p className="font-bold text-slate-800 dark:text-slate-200">No hay movimientos en esta sección.</p>
           </div>
         ) : (
@@ -957,15 +952,15 @@ export default function MovimientosPage() {
               const hasDifferentCurrency = curr !== "PYG";
 
               return (
-                <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-4 gap-3 hover:bg-slate-100 dark:hover:bg-slate-950/60 px-3 rounded-2xl transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-800/50">
-                  <div className="flex items-start sm:items-center gap-3.5">
+                <div key={item.id} className="flex flex-col md:flex-row md:items-center justify-between py-3.5 sm:py-4 gap-3 hover:bg-slate-100/70 dark:hover:bg-slate-950/60 px-2.5 sm:px-3 rounded-2xl transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-800/50">
+                  <div className="flex items-start sm:items-center gap-3">
                     
                     {item.isInstallment && (
                       <button
                         type="button"
                         onClick={() => toggleInstallmentPaid(item)}
                         title={item.isPaid ? "Cuota Pagada" : "Cuota Pendiente"}
-                        className={`h-6 w-6 rounded-xl border flex items-center justify-center transition-all shrink-0 font-bold cursor-pointer ${
+                        className={`h-6 w-6 rounded-xl border flex items-center justify-center transition-all shrink-0 font-bold cursor-pointer mt-0.5 sm:mt-0 ${
                           item.isPaid ? "bg-emerald-500 border-emerald-400 text-slate-950 shadow-md shadow-emerald-500/20" : "bg-slate-100 dark:bg-slate-950 border-slate-400 dark:border-slate-700 text-transparent"
                         }`}
                       >
@@ -973,52 +968,52 @@ export default function MovimientosPage() {
                       </button>
                     )}
 
-                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl shrink-0 shadow-inner ${isInc ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"}`}>
-                      {isInc ? <ArrowUpRight className="h-5 w-5" /> : <ArrowDownRight className="h-5 w-5" />}
+                    <div className={`flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl sm:rounded-2xl shrink-0 shadow-inner ${isInc ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"}`}>
+                      {isInc ? <ArrowUpRight className="h-4 w-4 sm:h-5 sm:w-5" /> : <ArrowDownRight className="h-4 w-4 sm:h-5 sm:w-5" />}
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-bold text-slate-900 dark:text-slate-100 text-sm leading-snug">{item.description}</p>
+                        <p className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm leading-snug break-words">{item.description}</p>
                         
                         {item.isInstallment && (
-                          <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
+                          <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20 whitespace-nowrap">
                             Cuota {item.installmentCurrent}/{item.installmentTotal} {item.isPaid ? "(Pagado)" : "(Pendiente)"}
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                        {item.counterpartyName || "Comercio"} • Categoría: <span className="text-cyan-600 dark:text-cyan-400">{item.categoryId}</span> • Fecha: {item.date}
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono break-words">
+                        {item.counterpartyName || "Comercio"} • Cat: <span className="text-cyan-600 dark:text-cyan-400">{item.categoryId}</span> • {item.date}
                       </p>
                     </div>
                   </div>
 
-                  {/* VISUALIZACIÓN DUAL DE MONTOS */}
-                  <div className="flex items-center justify-between sm:justify-end gap-4 pl-14 sm:pl-0">
-                    <div className="text-right font-mono">
-                      <span className={`font-black text-base sm:text-lg block ${isInc ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                  {/* MONTOS Y ACCIONES */}
+                  <div className="flex items-center justify-between md:justify-end gap-3 sm:gap-4 pl-0 sm:pl-12 md:pl-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800/40">
+                    <div className="text-left md:text-right font-mono">
+                      <span className={`font-black text-sm sm:text-base md:text-lg block tracking-tight ${isInc ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                         {isInc ? "+" : "-"}{sym} {formatPYG(origAmt)} {curr}
                       </span>
                       {hasDifferentCurrency && (
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold block">
+                        <span className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-bold block">
                           (≈ ₲ {formatPYG(item.amount)})
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {item.isInstallment && !item.isPaid && (
-                        <Button size="sm" variant="outline" onClick={() => { setPartialPaymentItem(item); setPartialAmountInput(String(origAmt)); }} className="h-8 px-2.5 rounded-xl border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold cursor-pointer">
-                          Pago Parcial
+                        <Button size="sm" variant="outline" onClick={() => { setPartialPaymentItem(item); setPartialAmountInput(String(origAmt)); }} className="h-8 px-2 rounded-xl border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-bold cursor-pointer">
+                          Parcial
                         </Button>
                       )}
                       {imgs.length > 0 && (
-                        <Button size="icon" variant="ghost" onClick={() => setZoomImageModal(imgs[0])} title="Ver Comprobante" className="h-9 w-9 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10 rounded-xl cursor-pointer">
+                        <Button size="icon" variant="ghost" onClick={() => setZoomImageModal(imgs[0])} title="Ver Comprobante" className="h-8 w-8 sm:h-9 sm:w-9 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10 rounded-xl cursor-pointer">
                           <Eye className="h-4 w-4" />
                         </Button>
                       )}
-                      <Button size="icon" variant="ghost" onClick={() => handleOpenEdit(item)} title="Modificar registro" className="h-9 w-9 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-500/10 rounded-xl cursor-pointer"><Edit3 className="h-4 w-4" /></Button>
-                      <Button size="icon" variant="ghost" onClick={() => setItemToDelete(item)} title="Eliminar registro" className="h-9 w-9 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 rounded-xl cursor-pointer"><Trash2 className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" onClick={() => handleOpenEdit(item)} title="Modificar registro" className="h-8 w-8 sm:h-9 sm:w-9 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-500/10 rounded-xl cursor-pointer"><Edit3 className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" onClick={() => setItemToDelete(item)} title="Eliminar registro" className="h-8 w-8 sm:h-9 sm:w-9 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 rounded-xl cursor-pointer"><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </div>
                 </div>
@@ -1040,10 +1035,10 @@ export default function MovimientosPage() {
 
       {/* MODAL EXPORTAR POR RANGO */}
       {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in zoom-in-95">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-7 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-4 backdrop-blur-md animate-in zoom-in-95">
+          <div className="w-full max-w-md rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-7 shadow-2xl space-y-4">
             <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <FileSpreadsheet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> Exportar Planilla (CSV)
+              <FileSpreadsheet className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" /> Exportar Planilla (CSV)
             </h3>
             
             <div className="space-y-3 text-xs">
@@ -1051,7 +1046,7 @@ export default function MovimientosPage() {
               <select
                 value={exportRangeType}
                 onChange={(e) => setExportRangeType(e.target.value as any)}
-                className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 font-semibold text-slate-900 dark:text-white cursor-pointer"
+                className="w-full h-11 rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 font-semibold text-slate-900 dark:text-white cursor-pointer"
               >
                 <option value="all">Todo el registro histórico</option>
                 <option value="30">Últimos 30 días</option>
@@ -1083,20 +1078,20 @@ export default function MovimientosPage() {
 
       {/* MODAL CREAR / EDITAR */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in">
-          <div className="w-full max-w-xl rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
-            <div className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 p-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2.5">
-                  <Sparkles className="h-5 w-5 text-cyan-600 dark:text-cyan-400" /> {editingId ? "Modificar Movimiento" : "Registrar Comprobante / Movimiento"}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-2 sm:p-4 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-xl rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 p-4 sm:p-6">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2 truncate">
+                  <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-cyan-600 dark:text-cyan-400 shrink-0" /> <span className="truncate">{editingId ? "Modificar Movimiento" : "Registrar Comprobante"}</span>
                 </h3>
-                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 px-3 rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-[11px] text-cyan-600 dark:text-cyan-400 font-bold cursor-pointer">
-                  <RefreshCw className="h-3 w-3 mr-1" /> Escanear Archivo IA
+                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 px-2.5 sm:px-3 rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-[10px] sm:text-[11px] text-cyan-600 dark:text-cyan-300 font-bold cursor-pointer shrink-0">
+                  <RefreshCw className="h-3 w-3 mr-1" /> Escanear IA
                 </Button>
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto flex-1">
               
               {scannedImages.length > 0 && (
                 <div className="relative rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 flex flex-col items-center justify-center">
@@ -1109,14 +1104,14 @@ export default function MovimientosPage() {
                     </Button>
                   </div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={scannedImages[0]} alt="Comprobante" onClick={() => setZoomImageModal(scannedImages[0])} className="max-h-48 object-contain rounded-xl border border-slate-200 dark:border-slate-800 cursor-zoom-in bg-white" />
+                  <img src={scannedImages[0]} alt="Comprobante" onClick={() => setZoomImageModal(scannedImages[0])} className="max-h-40 object-contain rounded-xl border border-slate-200 dark:border-slate-800 cursor-zoom-in bg-white" />
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Tipo de Operación</Label>
-                  <select value={formType} onChange={(e) => setFormType(e.target.value as any)} className={`w-full h-11 rounded-2xl border px-4 text-xs font-bold outline-none cursor-pointer ${formType === "income" ? "border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300" : "border-rose-500/50 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300"}`}>
+                  <select value={formType} onChange={(e) => setFormType(e.target.value as any)} className={`w-full h-10 sm:h-11 rounded-xl sm:rounded-2xl border px-3 sm:px-4 text-xs font-bold outline-none cursor-pointer ${formType === "income" ? "border-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300" : "border-rose-500/50 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300"}`}>
                     <option value="expense">Gasto / Egreso</option>
                     <option value="income">Ingreso / Entrada</option>
                   </select>
@@ -1127,7 +1122,7 @@ export default function MovimientosPage() {
                   <select
                     value={isFiscalInvoice ? "fiscal" : "common"}
                     onChange={(e) => setIsFiscalInvoice(e.target.value === "fiscal")}
-                    className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
+                    className="w-full h-10 sm:h-11 rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 sm:px-4 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
                   >
                     <option value="common">Gasto Común / Sin Comprobante</option>
                     <option value="fiscal">Factura Fiscal (Con CDC / RUC)</option>
@@ -1136,12 +1131,12 @@ export default function MovimientosPage() {
               </div>
 
               {editingId && editingItemFull?.isInstallment && (
-                <div className="rounded-2xl border border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20 p-4 space-y-2">
+                <div className="rounded-2xl border border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20 p-3.5 space-y-2">
                   <Label className="text-xs text-blue-700 dark:text-blue-300 font-bold">Alcance de Modificación de Cuotas</Label>
                   <select
                     value={editScope}
                     onChange={(e) => setEditScope(e.target.value as any)}
-                    className="w-full h-9 rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
+                    className="w-full h-9 rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
                   >
                     <option value="single">Modificar únicamente esta cuota (Mes en curso)</option>
                     <option value="global">Modificar en general (Afecta a todo el plan de cuotas)</option>
@@ -1149,14 +1144,14 @@ export default function MovimientosPage() {
                 </div>
               )}
 
-              {/* SELECCIÓN DE MONEDA Y MONTO CON SÍMBOLO DINÁMICO */}
+              {/* SELECCIÓN DE MONEDA Y MONTO */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Moneda</Label>
                   <select
                     value={formCurrency}
                     onChange={(e) => setFormCurrency(e.target.value)}
-                    className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 text-xs text-slate-900 dark:text-slate-100 outline-none font-bold cursor-pointer"
+                    className="w-full h-10 sm:h-11 rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 sm:px-4 text-xs text-slate-900 dark:text-slate-100 outline-none font-bold cursor-pointer"
                   >
                     <option value="PYG">Guaraní (PYG ₲)</option>
                     <option value="USD">Dólar (USD $)</option>
@@ -1181,12 +1176,11 @@ export default function MovimientosPage() {
                       if (parsed > 0) setFormAmountInput(formatPYG(parsed));
                     }}
                     placeholder={formCurrency === "PYG" ? "Ej: 150.000" : "Ej: 300"}
-                    className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-black text-base px-4 font-mono"
+                    className="h-10 sm:h-11 rounded-xl sm:rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-black text-sm sm:text-base px-3 sm:px-4 font-mono"
                   />
                 </div>
               </div>
 
-              {/* COTIZACIÓN PERSONALIZADA (SI NO ES PYG) */}
               {formCurrency !== "PYG" && (
                 <div className="space-y-1.5 p-3.5 rounded-2xl border border-amber-500/30 bg-amber-50/40 dark:bg-amber-950/20">
                   <Label className="text-xs text-amber-800 dark:text-amber-300 font-bold">
@@ -1197,15 +1191,15 @@ export default function MovimientosPage() {
                     inputMode="numeric"
                     value={customExchangeRate}
                     onChange={(e) => setCustomExchangeRate(e.target.value)}
-                    placeholder={`Cotización en vivo actual: ${formatPYG(liveRates[formCurrency] ? (liveRates["PYG"] / liveRates[formCurrency]) : 5924.97)}`}
-                    className="h-10 rounded-xl border-amber-500/30 bg-white dark:bg-slate-950 font-mono text-xs px-3"
+                    placeholder={`Cotización actual: ${formatPYG(liveRates[formCurrency] ? (liveRates["PYG"] / liveRates[formCurrency]) : 5924.97)}`}
+                    className="h-9 sm:h-10 rounded-xl border-amber-500/30 bg-white dark:bg-slate-950 font-mono text-xs px-3"
                   />
                 </div>
               )}
 
               {/* CUOTAS */}
               {formType === "expense" && (
-                <div className="rounded-2xl border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 p-3.5 sm:p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 text-[11px]"><CreditCard className="h-4 w-4" /> En Cuotas Mes a Mes</span>
                     <input type="checkbox" checked={isInstallment} onChange={(e) => setIsInstallment(e.target.checked)} className="h-4 w-4 rounded border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-500 cursor-pointer" />
@@ -1217,7 +1211,7 @@ export default function MovimientosPage() {
                         <select
                           value={installmentMode}
                           onChange={(e) => setInstallmentMode(e.target.value as any)}
-                          className="w-full h-9 rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-2 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
+                          className="w-full h-9 rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
                         >
                           <option value="fixed">Monto Fijo Mensual (Sin Interés adicional)</option>
                           <option value="interest">Monto Total con % de Interés</option>
@@ -1227,12 +1221,12 @@ export default function MovimientosPage() {
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">Plazo (Meses)</Label>
-                          <Input type="number" inputMode="numeric" min={2} max={60} value={installmentTotal} onChange={(e) => setInstallmentTotal(e.target.value)} className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
+                          <Input type="number" inputMode="numeric" min={2} max={60} value={installmentTotal} onChange={(e) => setInstallmentTotal(e.target.value)} className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-3" />
                         </div>
                         {installmentMode === "interest" && (
                           <div>
                             <Label className="text-[10px] text-amber-800 dark:text-amber-200 font-bold">% Interés Total</Label>
-                            <Input type="number" inputMode="numeric" min={0} max={100} value={installmentInterest} onChange={(e) => setInstallmentInterest(e.target.value)} placeholder="Ej: 20" className="h-8 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-2" />
+                            <Input type="number" inputMode="numeric" min={0} max={100} value={installmentInterest} onChange={(e) => setInstallmentInterest(e.target.value)} placeholder="Ej: 20" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-amber-800 dark:text-amber-300 font-mono text-xs px-3" />
                           </div>
                         )}
                       </div>
@@ -1252,21 +1246,21 @@ export default function MovimientosPage() {
                 />
               </div>
 
-              {/* Campos fiscales opcionales */}
+              {/* Campos fiscales */}
               {formType === "expense" && isFiscalInvoice && (
                 <>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Gravada 10% (Opcional)</Label><Input inputMode="numeric" value={formGravada10} onChange={(e) => setFormGravada10(e.target.value)} placeholder="Ej: 100.000" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
-                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Gravada 5% (Opcional)</Label><Input inputMode="numeric" value={formGravada5} onChange={(e) => setFormGravada5(e.target.value)} placeholder="Ej: 0" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
-                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Exenta (Opcional)</Label><Input inputMode="numeric" value={formExenta} onChange={(e) => setFormExenta(e.target.value)} placeholder="Ej: 0" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Gravada 10%</Label><Input inputMode="numeric" value={formGravada10} onChange={(e) => setFormGravada10(e.target.value)} placeholder="Ej: 100.000" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Gravada 5%</Label><Input inputMode="numeric" value={formGravada5} onChange={(e) => setFormGravada5(e.target.value)} placeholder="Ej: 0" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
+                    <div className="space-y-1"><Label className="text-[10px] text-slate-600 dark:text-slate-400 font-bold">Exenta</Label><Input inputMode="numeric" value={formExenta} onChange={(e) => setFormExenta(e.target.value)} placeholder="Ej: 0" className="h-9 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200 text-xs px-3 font-mono" /></div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Local / Emisor (Opcional)</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej: Supermercado Stock" className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4" /></div>
-                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">N° de Factura (Opcional)</Label><Input value={formDocNumber} onChange={(e) => setFormDocNumber(e.target.value)} placeholder="001-001-0001234" className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Local / Emisor</Label><Input value={formCounterparty} onChange={(e) => setFormCounterparty(e.target.value)} placeholder="Ej: Supermercado Stock" className="h-10 sm:h-11 rounded-xl sm:rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">N° de Factura</Label><Input value={formDocNumber} onChange={(e) => setFormDocNumber(e.target.value)} placeholder="001-001-0001234" className="h-10 sm:h-11 rounded-xl sm:rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
                   </div>
 
-                  <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Código CDC (Opcional)</Label><Input value={formCdc} onChange={(e) => setFormCdc(e.target.value)} placeholder="01003798..." className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
+                  <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Código CDC</Label><Input value={formCdc} onChange={(e) => setFormCdc(e.target.value)} placeholder="01003798..." className="h-10 sm:h-11 rounded-xl sm:rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
                 </>
               )}
 
@@ -1275,17 +1269,17 @@ export default function MovimientosPage() {
                 <textarea required rows={3} value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder="Ej: Compra mensual de mercaderías para stock" className="w-full rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-900 dark:text-slate-100 outline-none resize-none font-medium" />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Fecha de Emisión</Label><Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Fecha de Emisión</Label><Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="h-10 sm:h-11 rounded-xl sm:rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-4 font-mono" /></div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Categoría</Label>
-                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full h-11 rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 text-xs text-slate-900 dark:text-slate-100 outline-none cursor-pointer">
+                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="w-full h-10 sm:h-11 rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-4 text-xs text-slate-900 dark:text-slate-100 outline-none cursor-pointer">
                     {(formType === "expense" ? CATEGORIES_EXPENSE.map(c => c.id) : CATEGORIES_INCOME).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                   </select>
                 </div>
               </div>
 
-              {/* BOTONES DE ACCIÓN CON BOTÓN CANCELAR CORREGIDO */}
+              {/* BOTONES DE ACCIÓN */}
               <div className="flex justify-end gap-3 border-t border-slate-200 dark:border-slate-800 pt-4">
                 <Button type="button" variant="outline" onClick={() => setShowModal(false)} className="rounded-xl border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs text-slate-800 dark:text-slate-200 h-10 px-4 cursor-pointer">Cancelar</Button>
                 <Button type="submit" disabled={isSubmitting} className="rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white h-10 px-6 cursor-pointer">Confirmar y Guardar</Button>
@@ -1295,12 +1289,12 @@ export default function MovimientosPage() {
         </div>
       )}
 
-      {/* MODAL PAGO PARCIAL / MÍNIMO */}
+      {/* MODAL PAGO PARCIAL */}
       {partialPaymentItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in zoom-in-95">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-7 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-4 backdrop-blur-md animate-in zoom-in-95">
+          <div className="w-full max-w-md rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-7 shadow-2xl space-y-4">
             <h3 className="text-base font-bold text-amber-600 dark:text-amber-400 flex items-center gap-2">
-              <CreditCard className="h-5 w-5" /> Informar Pago Mínimo / Parcial
+              <CreditCard className="h-5 w-5 shrink-0" /> Informar Pago Mínimo / Parcial
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               Cuota actual: <strong className="font-mono">{formatPYG(partialPaymentItem.amount)} ₲</strong>. Ingresa el monto efectivamente pagado hoy:
@@ -1314,7 +1308,7 @@ export default function MovimientosPage() {
                 value={partialAmountInput}
                 onChange={(e) => setPartialAmountInput(e.target.value)}
                 placeholder="Ej: 100.000"
-                className="h-11 rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white px-4"
+                className="h-11 rounded-xl sm:rounded-2xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 font-mono font-bold text-slate-900 dark:text-white px-4"
               />
 
               <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
@@ -1341,19 +1335,19 @@ export default function MovimientosPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-2 backdrop-blur-md animate-in fade-in">
           <div className="relative w-full h-full overflow-auto flex flex-col items-center justify-center p-4">
             <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
-              <Button onClick={() => downloadImage(zoomImageModal)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold gap-2 cursor-pointer"><Download className="h-4 w-4" /> Descargar PNG</Button>
-              <Button onClick={() => setZoomImageModal(null)} className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold cursor-pointer">Cerrar ✕</Button>
+              <Button onClick={() => downloadImage(zoomImageModal)} className="px-3 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold gap-1.5 cursor-pointer"><Download className="h-3.5 w-3.5" /> Descargar</Button>
+              <Button onClick={() => setZoomImageModal(null)} className="px-3 sm:px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold cursor-pointer">Cerrar ✕</Button>
             </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={zoomImageModal} alt="Zoom" className="max-w-[95vw] max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-slate-700 bg-white my-auto scale-110 origin-center" />
+            <img src={zoomImageModal} alt="Zoom" className="max-w-[95vw] max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-slate-700 bg-white my-auto scale-100 sm:scale-110 origin-center" />
           </div>
         </div>
       )}
 
       {/* MODAL ELIMINAR */}
       {itemToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in zoom-in-95">
-          <div className="w-full max-w-sm rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-7 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-4 backdrop-blur-md animate-in zoom-in-95">
+          <div className="w-full max-w-sm rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-7 shadow-2xl space-y-4">
             <div className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0"><AlertTriangle className="h-6 w-6" /></div>
               <div className="space-y-0.5"><h3 className="text-base font-bold text-slate-900 dark:text-slate-100">¿Eliminar registro?</h3><p className="text-xs text-slate-500 dark:text-slate-400">Esta acción actualizará tu balance contable.</p></div>

@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * PANEL FINANCIERO PRINCIPAL - VIRUCHECK (RESPONSIVE MEJORADO: IPAD, TABLET, CELULAR)
+ * PANEL FINANCIERO PRINCIPAL - VIRUCHECK (MODO CLARO/OSCURO, SALDO OCULTO Y REGISTROS)
  * ============================================================================
  */
 
@@ -459,10 +459,10 @@ export default function DashboardPage() {
   const availableYears = Array.from({ length: 16 }, (_, i) => 2020 + i);
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 space-y-5 pb-28 md:pb-12 animate-in fade-in duration-300 overflow-x-hidden">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 space-y-6 pb-24 md:pb-12 animate-in fade-in duration-300">
       
       {/* Cabecera Principal */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
             <Wallet className="h-6 w-6 text-blue-600 dark:text-blue-500 shrink-0" />
@@ -473,41 +473,41 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             onClick={() => setShowSalaryModal(true)}
-            className="w-full sm:w-auto h-9 px-3.5 rounded-xl bg-blue-600/20 text-blue-700 dark:text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-xs font-bold gap-1.5 transition-all cursor-pointer shadow-sm"
+            className="flex-1 sm:flex-initial h-9 px-3.5 rounded-xl bg-blue-600/10 dark:bg-blue-600/20 text-blue-700 dark:text-blue-400 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-xs font-bold gap-1.5 transition-all cursor-pointer shadow-sm"
           >
-            <Building className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{isNewUser ? "Definir Salario" : "Configurar Salario"}</span>
+            <Building className="h-3.5 w-3.5" />
+            {isNewUser ? "Definir Salario" : "Configurar Salario"}
           </Button>
 
           <Button
             size="sm"
             onClick={() => setShowIncomeModal(true)}
-            className="w-full sm:w-auto h-9 px-3.5 rounded-xl bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-1.5 transition-all cursor-pointer shadow-sm"
+            className="flex-1 sm:flex-initial h-9 px-3.5 rounded-xl bg-emerald-600/10 dark:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-1.5 transition-all cursor-pointer shadow-sm"
           >
-            <Sparkles className="h-3.5 w-3.5 shrink-0" />
-            <span>Ingreso Extra</span>
+            <Sparkles className="h-3.5 w-3.5" />
+            Ingreso Extra
           </Button>
         </div>
       </div>
 
       {/* Selector de Calendario */}
-      <div className="relative z-30 bg-white/90 dark:bg-slate-900/90 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="relative z-40 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Button
             size="sm"
             variant="outline"
             onClick={() => setShowDatePicker(!showDatePicker)}
-            className="h-9 px-3 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-cyan-600 dark:hover:text-cyan-400 gap-2 transition-all cursor-pointer justify-center sm:justify-start"
+            className="h-9 px-3 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-cyan-600 dark:hover:text-cyan-400 gap-2 transition-all cursor-pointer"
           >
-            <CalendarIcon className="h-4 w-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
+            <CalendarIcon className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
             <span>{monthNames[selectedMonth]} {selectedYear}</span>
           </Button>
 
-          <div className="flex items-center justify-center gap-1.5">
+          <div className="flex items-center gap-1.5">
             <Button
               size="icon"
               variant="ghost"
@@ -545,7 +545,7 @@ export default function DashboardPage() {
         </div>
 
         {showDatePicker && (
-          <div className="mt-3 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 shadow-2xl backdrop-blur-2xl animate-in zoom-in-95 z-40 absolute top-full left-0 w-full sm:w-80">
+          <div className="mt-3 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 shadow-xl backdrop-blur-2xl animate-in zoom-in-95 z-50 absolute top-full left-0 w-full sm:w-80">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 mb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Seleccionar Periodo</span>
               <select
@@ -571,7 +571,7 @@ export default function DashboardPage() {
                     }}
                     className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       isCurrent
-                        ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-blue-500/20"
+                        ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md"
                         : "bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800"
                     }`}
                   >
@@ -584,21 +584,22 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Tarjetas Principales (Grid adaptable 1 columna en móvil, 2 en iPad/Tablet/Notebook) */}
+      {/* Tarjetas Principales */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         
-        {/* Tarjeta de Saldo Disponible */}
-        <div className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-emerald-950/40 p-4 sm:p-5 shadow-xl transition-all flex flex-col justify-between">
+        {/* Tarjeta de Saldo Disponible con Botón de Ojo */}
+        <div className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-white dark:bg-slate-900 p-5 shadow-sm transition-all flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Saldo Disponible (Real)</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Saldo Disponible (Real)</span>
               
-              <div className="flex items-center gap-1.5 sm:gap-2">
+              <div className="flex items-center gap-2">
+                {/* Botón de Ojo para ocultar/mostrar únicamente el saldo */}
                 <button
                   type="button"
                   onClick={() => setHideBalance(!hideBalance)}
                   title={hideBalance ? "Mostrar saldo" : "Ocultar saldo"}
-                  className="rounded-xl bg-slate-200 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                  className="rounded-xl bg-slate-100 dark:bg-slate-800 p-2 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   {hideBalance ? <EyeOff className="h-4 w-4 text-amber-500" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -613,29 +614,29 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className={`mt-3 text-xl sm:text-2xl md:text-3xl font-black truncate ${availableBalance >= 0 ? "text-slate-900 dark:text-white" : "text-rose-600 dark:text-rose-400"}`}>
+            <div className={`mt-3 text-2xl sm:text-3xl font-black ${availableBalance >= 0 ? "text-slate-900 dark:text-white" : "text-rose-600 dark:text-rose-400"}`}>
               {hideBalance ? "••••••••••••" : formatCurrency(availableBalance, "PYG")}
             </div>
 
-            <div className="mt-3 flex flex-col gap-1.5 text-[11px] text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-800/80 pt-2.5 font-mono">
-              <div className="flex justify-between items-center">
+            <div className="mt-3 flex flex-col gap-1.5 text-[11px] text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/80 pt-2.5 font-mono">
+              <div className="flex justify-between">
                 <span>Sueldo Bruto:</span>
                 <span className="text-slate-800 dark:text-slate-200">{hideBalance ? "••••••" : formatCurrency(grossSalary, "PYG")}</span>
               </div>
               
               {hasIps ? (
-                <div className="flex justify-between items-center text-amber-600 dark:text-amber-400 font-bold">
+                <div className="flex justify-between text-amber-600 dark:text-amber-400 font-bold">
                   <span>Deducción IPS (9%):</span>
                   <span>{hideBalance ? "••••••" : `-${formatCurrency(ipsDeduction, "PYG")}`}</span>
                 </div>
               ) : null}
 
-              <div className="flex justify-between items-center text-emerald-600 dark:text-emerald-400 font-bold">
+              <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
                 <span>Sueldo Neto (Peso Neto):</span>
                 <span>{hideBalance ? "••••••" : formatCurrency(netMonthlySalary, "PYG")}</span>
               </div>
 
-              <div className="flex justify-between items-center text-cyan-600 dark:text-cyan-400 pt-1 border-t border-slate-200 dark:border-slate-800/50">
+              <div className="flex justify-between text-cyan-600 dark:text-cyan-400 pt-1 border-t border-slate-100 dark:border-slate-800/50">
                 <span>Ingresos Extras del Mes:</span>
                 <span>{hideBalance ? "••••••" : `+${formatCurrency(monthExtraIncomes, "PYG")}`}</span>
               </div>
@@ -647,16 +648,16 @@ export default function DashboardPage() {
         <button
           type="button"
           onClick={() => router.push("/movimientos")}
-          className="group text-left relative overflow-hidden rounded-3xl border border-rose-500/30 bg-gradient-to-br from-white via-slate-50 to-rose-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-rose-950/30 p-4 sm:p-5 shadow-xl transition-all hover:border-rose-400 active:scale-[0.99] cursor-pointer flex flex-col justify-between"
+          className="group text-left relative overflow-hidden rounded-3xl border border-rose-500/30 bg-white dark:bg-slate-900 p-5 shadow-sm transition-all hover:border-rose-400 active:scale-[0.99] cursor-pointer flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Total Gastado (Propios)</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Total Gastado (Propios)</span>
               <div className="rounded-xl bg-rose-500/10 p-2 text-rose-600 dark:text-rose-400 group-hover:scale-110 transition-transform">
                 <ArrowDownRight className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-3 text-xl sm:text-2xl md:text-3xl font-black text-rose-600 dark:text-rose-400 truncate">
+            <div className="mt-3 text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400">
               -{formatCurrency(monthExpenses, "PYG")}
             </div>
             <p className="mt-1.5 text-[11px] text-slate-600 dark:text-slate-400">
@@ -668,10 +669,10 @@ export default function DashboardPage() {
       </div>
 
       {/* Gráfico Dinámico (Mes / Año) */}
-      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 p-4 sm:p-6 backdrop-blur-xl shadow-lg space-y-4 transition-colors">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 pb-3">
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/80 pb-3">
           <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-cyan-600 dark:text-cyan-400 animate-pulse shrink-0" />
+            <Activity className="h-4 w-4 text-cyan-600 dark:text-cyan-400 animate-pulse" />
             <div>
               <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                 Curva de Tendencia Financiera
@@ -681,14 +682,14 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 self-start sm:self-auto">
-            <button onClick={() => setViewMode("month")} className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${viewMode === "month" ? "bg-blue-600 text-white shadow-md" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"}`}>Por Mes</button>
-            <button onClick={() => setViewMode("year")} className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${viewMode === "year" ? "bg-blue-600 text-white shadow-md" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"}`}>Por Año</button>
+            <button onClick={() => setViewMode("month")} className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${viewMode === "month" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"}`}>Por Mes</button>
+            <button onClick={() => setViewMode("year")} className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${viewMode === "year" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"}`}>Por Año</button>
           </div>
         </div>
 
-        <div className="overflow-x-auto pb-2 pt-2 -mx-4 px-4 sm:mx-0 sm:px-0">
-          <div className="min-w-[600px] relative">
-            <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-40 sm:h-44 overflow-visible">
+        <div className="overflow-x-auto pb-2 pt-2">
+          <div className="min-w-[650px] relative">
+            <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-44 overflow-visible">
               <defs>
                 <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.35" />
@@ -720,7 +721,7 @@ export default function DashboardPage() {
               })}
             </svg>
 
-            <div className="flex justify-between px-4 pt-2 border-t border-slate-200 dark:border-slate-800/80">
+            <div className="flex justify-between px-4 pt-2 border-t border-slate-100 dark:border-slate-800/80">
               {chartData.map((d, i) => (<span key={i} className="text-[10px] text-slate-500 font-mono text-center flex-1">{d.label}</span>))}
             </div>
           </div>
@@ -728,81 +729,78 @@ export default function DashboardPage() {
       </div>
 
       {/* Registro de Movimientos, Recibos e Ingresos */}
-      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 p-4 sm:p-6 backdrop-blur-xl shadow-lg space-y-4 transition-colors">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <History className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <div>
               <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">Registro de Movimientos, Recibos e Ingresos</h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">Mostrando {paginatedList.length} de {unifiedActivityList.length} registros del periodo</p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-full sm:w-44">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative flex-1 sm:w-44">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-              <Input placeholder="Buscar por concepto..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-8 w-full pl-8 text-xs rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200" />
+              <Input placeholder="Buscar por concepto..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-8 pl-8 text-xs rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-200" />
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <select
-                value={itemsPerPage}
-                onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                className="h-8 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-2 text-xs text-slate-800 dark:text-slate-200 outline-none font-bold cursor-pointer flex-1 sm:flex-initial"
-              >
-                <option value={10}>10 por pág</option>
-                <option value={20}>20 por pág</option>
-                <option value={50}>50 por pág</option>
-              </select>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => setItemsPerPage(Number(e.target.value))}
+              className="h-8 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-2 text-xs text-slate-800 dark:text-slate-200 outline-none font-bold cursor-pointer"
+            >
+              <option value={10}>10 por pág</option>
+              <option value={20}>20 por pág</option>
+              <option value={50}>50 por pág</option>
+            </select>
 
-              <Button
-                size="sm"
-                onClick={exportToExcel}
-                className="h-8 px-3 rounded-xl bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-1.5 cursor-pointer flex-1 sm:flex-initial"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /> Excel
-              </Button>
+            <Button
+              size="sm"
+              onClick={exportToExcel}
+              className="h-8 px-3 rounded-xl bg-emerald-600/10 dark:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600 hover:text-white text-xs font-bold gap-1.5 cursor-pointer"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
+            </Button>
 
-              <Button size="sm" variant="outline" onClick={() => setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))} className="h-8 px-2.5 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer flex-1 sm:flex-initial">
-                <ArrowUpDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 mr-1 shrink-0" /> {sortOrder === "desc" ? "Nuevos" : "Antiguos"}
-              </Button>
-            </div>
+            <Button size="sm" variant="outline" onClick={() => setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))} className="h-8 px-2.5 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+              <ArrowUpDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 mr-1" /> {sortOrder === "desc" ? "Nuevos" : "Antiguos"}
+            </Button>
           </div>
         </div>
 
         {loading ? (
           <div className="py-6 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-blue-500" /></div>
         ) : unifiedActivityList.length === 0 ? (
-          <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-950/40">
+          <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-950/40">
             <p className="font-bold text-slate-700 dark:text-slate-300 mb-1">No hay registros en {monthNames[selectedMonth]} {selectedYear}.</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-200 dark:divide-slate-800/60">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {paginatedList.map((item) => {
               const isInc = item.type === "income";
               const isAudit = item.kind === "audit";
               const isReceipt = item.kind === "receipt";
 
               return (
-                <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-3.5 gap-2 text-xs transition-colors rounded-xl px-2 hover:bg-slate-100 dark:hover:bg-slate-950/60">
-                  <div className="flex items-start sm:items-center gap-3 overflow-hidden">
-                    <div className={`flex h-9 w-9 items-center justify-center rounded-xl shrink-0 mt-0.5 sm:mt-0 ${isReceipt ? "bg-purple-500/10 text-purple-600 dark:text-purple-400" : isAudit ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : isInc ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400"}`}>
+                <div key={item.id} className="flex items-center justify-between py-3 text-xs transition-colors rounded-xl px-2 hover:bg-slate-50 dark:hover:bg-slate-950/60">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-9 w-9 items-center justify-center rounded-xl shrink-0 ${isReceipt ? "bg-purple-500/10 text-purple-600 dark:text-purple-400" : isAudit ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : isInc ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400"}`}>
                       {isReceipt ? <FileText className="h-4 w-4" /> : isAudit ? <ShieldAlert className="h-4 w-4" /> : isInc ? <TrendingUp className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
                     </div>
-                    <div className="overflow-hidden">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{item.title}</p>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-slate-900 dark:text-slate-100">{item.title}</p>
                         {item.documentNumber && item.documentNumber !== "S/N" && (
-                          <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 font-mono text-[10px] shrink-0">N° {item.documentNumber}</span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 font-mono text-[10px]">N° {item.documentNumber}</span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5 truncate">Categoría: <span className="text-slate-800 dark:text-slate-300 font-semibold">{item.category}</span> • Fecha: {item.date}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">Categoría: <span className="text-slate-800 dark:text-slate-300 font-semibold">{item.category}</span> • Fecha: {item.date}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-3 text-right pt-1 sm:pt-0 border-t sm:border-0 border-slate-100 dark:border-slate-800/40">
-                    <span className="text-[11px] text-slate-500 sm:hidden">Monto:</span>
-                    <span className={`font-mono font-bold text-sm sm:text-xs md:text-sm ${isAudit ? "text-amber-600 dark:text-amber-400" : isInc ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                  <div className="flex items-center gap-3 text-right">
+                    <span className={`font-mono font-bold text-sm ${isAudit ? "text-amber-600 dark:text-amber-400" : isInc ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                       {!isAudit && (isInc ? "+" : "-" )}{formatCurrency(item.amount, "PYG")}
                     </span>
                   </div>
@@ -813,11 +811,11 @@ export default function DashboardPage() {
         )}
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 pt-3 text-xs">
+          <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs">
             <span className="text-slate-500 dark:text-slate-400 font-mono">Página {currentPage} de {totalPages}</span>
             <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} className="h-8 px-3 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">Anterior</Button>
-              <Button size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} className="h-8 px-3 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">Siguiente</Button>
+              <Button size="sm" variant="outline" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} className="h-8 px-3 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">Anterior</Button>
+              <Button size="sm" variant="outline" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} className="h-8 px-3 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">Siguiente</Button>
             </div>
           </div>
         )}
@@ -825,29 +823,29 @@ export default function DashboardPage() {
 
       {/* MODAL CONFIGURAR SALARIO */}
       {showSalaryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-sm animate-in zoom-in-95 overflow-y-auto">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden p-5 sm:p-6 space-y-4 my-auto">
-            <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Briefcase className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" /> Configuración de Salario y Deducciones
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in zoom-in-95">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden p-6 space-y-4">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Briefcase className="h-5 w-5 text-blue-600 dark:text-blue-400" /> Configuración de Salario y Deducciones
             </h3>
             
             <form onSubmit={handleSaveSalary} className="space-y-4 text-xs">
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Empresa o Empleador</Label>
-                <Input value={employerName} onChange={(e) => setEmployerName(e.target.value)} required placeholder="Ej. Banco Continental S.A. o Empresa Principal" className="h-10 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-3" />
+                <Input value={employerName} onChange={(e) => setEmployerName(e.target.value)} required placeholder="Ej. Banco Continental S.A. o Empresa Principal" className="h-10 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-3" />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Sueldo Bruto Mensual (₲)</Label>
-                <Input type="number" step="1000" value={salaryAmount} onChange={(e) => setSalaryAmount(e.target.value)} required placeholder="Ej: 3500000" className="h-11 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-emerald-600 dark:text-emerald-400 font-bold text-base px-3 font-mono" />
+                <Input type="number" step="1000" value={salaryAmount} onChange={(e) => setSalaryAmount(e.target.value)} required placeholder="Ej: 3500000" className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-emerald-600 dark:text-emerald-400 font-bold text-base px-3 font-mono" />
               </div>
 
-              <div className="flex items-center justify-between py-2 border-t border-b border-slate-200 dark:border-slate-800 gap-2">
+              <div className="flex items-center justify-between py-2 border-t border-b border-slate-100 dark:border-slate-800">
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200">¿Aplicar descuento obligatorio de IPS (9%)?</span>
                 <button
                   type="button"
                   onClick={() => setHasIps(!hasIps)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${hasIps ? "bg-emerald-500" : "bg-slate-400 dark:bg-slate-700"}`}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${hasIps ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"}`}
                 >
                   <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${hasIps ? "translate-x-5" : "translate-x-0"}`} />
                 </button>
@@ -858,15 +856,15 @@ export default function DashboardPage() {
                 <select
                   value={salaryEditMode}
                   onChange={(e) => setSalaryEditMode(e.target.value as any)}
-                  className="w-full h-10 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 text-xs text-slate-900 dark:text-slate-200 outline-none font-medium cursor-pointer"
+                  className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 text-xs text-slate-900 dark:text-slate-200 outline-none font-medium cursor-pointer"
                 >
                   <option value="forward">Desde este mes en adelante (Fijo)</option>
                   <option value="all">Para todos los meses anteriores y futuros (Histórico)</option>
                 </select>
               </div>
 
-              <div className="flex justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-                <Button type="button" variant="outline" onClick={() => setShowSalaryModal(false)} className="rounded-xl border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">Cancelar</Button>
+              <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+                <Button type="button" variant="outline" onClick={() => setShowSalaryModal(false)} className="rounded-xl border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">Cancelar</Button>
                 <Button type="submit" className="rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white px-5 cursor-pointer">Guardar Salario</Button>
               </div>
             </form>
@@ -876,10 +874,10 @@ export default function DashboardPage() {
 
       {/* MODAL INGRESO EXTRA / ADELANTO */}
       {showIncomeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-sm animate-in zoom-in-95 overflow-y-auto">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden p-5 sm:p-6 space-y-4 my-auto">
-            <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" /> Registrar Ingreso Extra o Adelanto
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in zoom-in-95">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden p-6 space-y-4">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> Registrar Ingreso Extra o Adelanto
             </h3>
 
             <form onSubmit={handleSaveIncomeOrAdvance} className="space-y-4 text-xs">
@@ -888,7 +886,7 @@ export default function DashboardPage() {
                 <select
                   value={incomeType}
                   onChange={(e) => setIncomeType(e.target.value as any)}
-                  className="w-full h-10 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 text-xs text-slate-900 dark:text-slate-200 outline-none font-bold cursor-pointer"
+                  className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 text-xs text-slate-900 dark:text-slate-200 outline-none font-bold cursor-pointer"
                 >
                   <option value="extra">Bono, Comisión u Horas Extras</option>
                   <option value="advance">Adelanto Salarial (Descuento automático próximo mes)</option>
@@ -903,21 +901,21 @@ export default function DashboardPage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Concepto / Descripción</Label>
-                <Input value={extraTitle} onChange={(e) => setExtraTitle(e.target.value)} required placeholder={incomeType === "advance" ? "Ej. Adelanto Quincena de Septiembre" : "Ej. Bono por cumplimiento de metas"} className="h-10 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-3" />
+                <Input value={extraTitle} onChange={(e) => setExtraTitle(e.target.value)} required placeholder={incomeType === "advance" ? "Ej. Adelanto Quincena de Septiembre" : "Ej. Bono por cumplimiento de metas"} className="h-10 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-3" />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Monto (₲)</Label>
-                <Input type="number" step="1000" value={extraAmount} onChange={(e) => setExtraAmount(e.target.value)} required placeholder="Ej: 500000" className="h-11 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-emerald-600 dark:text-emerald-400 font-bold text-base px-3 font-mono" />
+                <Input type="number" step="1000" value={extraAmount} onChange={(e) => setExtraAmount(e.target.value)} required placeholder="Ej: 500000" className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-emerald-600 dark:text-emerald-400 font-bold text-base px-3 font-mono" />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-700 dark:text-slate-300 font-bold">Fecha de Recepción</Label>
-                <Input type="date" value={extraDate} onChange={(e) => setExtraDate(e.target.value)} required className="h-10 rounded-xl border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-3" />
+                <Input type="date" value={extraDate} onChange={(e) => setExtraDate(e.target.value)} required className="h-10 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 text-xs px-3" />
               </div>
 
-              <div className="flex justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-                <Button type="button" variant="outline" onClick={() => setShowIncomeModal(false)} className="rounded-xl border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">Cancelar y Volver</Button>
+              <div className="flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+                <Button type="button" variant="outline" onClick={() => setShowIncomeModal(false)} className="rounded-xl border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">Cancelar</Button>
                 <Button type="submit" className="rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-xs text-white px-5 cursor-pointer">Registrar Operación</Button>
               </div>
             </form>
