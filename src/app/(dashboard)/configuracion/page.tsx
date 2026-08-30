@@ -497,7 +497,7 @@ export default function ConfiguracionPage() {
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-6 pb-28 md:pb-12 px-4 sm:px-6 animate-in fade-in duration-300">
+    <div className="w-full max-w-7xl mx-auto space-y-8 pb-28 md:pb-12 px-4 sm:px-6 animate-in fade-in duration-300">
       
       <input ref={fileInputRef} type="file" accept="application/json" onChange={handleImportData} className="hidden" />
 
@@ -524,10 +524,10 @@ export default function ConfiguracionPage() {
         </p>
       </div>
 
-      {/* DISEÑO RESPONSIVO ADAPTADO PARA IPAD / TABLETS (Grid fluido lg:grid-cols-3) */}
+      {/* DISEÑO RESPONSIVO PERFECTO PARA IPAD / TABLETS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* COLUMNA PRINCIPAL (Ocupa 2 columnas en pantallas grandes y tablets horizontales) */}
+        {/* COLUMNA PRINCIPAL */}
         <div className="lg:col-span-2 space-y-6">
           
           {/* APARIENCIA GLOBAL */}
@@ -569,9 +569,12 @@ export default function ConfiguracionPage() {
 
           {/* GOOGLE FINANCE: GRÁFICO MULTILÍNEA + TABLA DE MERCADO */}
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 shadow-xl transition-colors space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+            
+            {/* CABECERA DE MERCADO APILADA PARA EVITAR SUPERPOSICIONES EN IPAD */}
+            <div className="flex flex-col gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+                <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
                   <TrendingUp className="h-4 w-4" />
                 </div>
                 <div>
@@ -580,42 +583,48 @@ export default function ConfiguracionPage() {
                 </div>
               </div>
 
-              {/* Botón de Actualización Manual y Reloj Responsivo */}
-              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap self-start sm:self-auto">
-                <div className="flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-950 px-3 py-1.5 border border-slate-200 dark:border-slate-800 text-[11px]">
-                  <Clock className="h-3.5 w-3.5 text-emerald-500 animate-spin" />
-                  <span className="text-slate-600 dark:text-slate-300 font-mono font-medium whitespace-nowrap">Última act: {lastUpdatedTime || "En línea"}</span>
+              {/* Fila inferior de la cabecera: Controles (Períodos, Reloj y Actualizar) perfectamente alineados */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                
+                {/* Selector de Período (1d, 5d, 1m, 1a) */}
+                <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-950 p-1 border border-slate-200 dark:border-slate-800 text-[11px]">
+                  {(["1d", "5d", "1m", "1a"] as const).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setPeriodoGoogle(p)}
+                      className={`px-3 py-1 rounded-lg font-bold uppercase transition-all cursor-pointer ${
+                        periodoGoogle === p
+                          ? "bg-blue-600 text-white shadow-md"
+                          : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => fetchLiveRates(true)}
-                  disabled={isRefreshingManual}
-                  className="h-8 px-3 rounded-xl border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-emerald-500 gap-1.5 cursor-pointer"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingManual ? "animate-spin text-emerald-500" : ""}`} />
-                  <span>Actualizar</span>
-                </Button>
-              </div>
-            </div>
 
-            {/* Selector de Período (1d, 5d, 1m, 1a) con fechas reales */}
-            <div className="flex justify-end">
-              <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-950 p-1 border border-slate-200 dark:border-slate-800 text-[11px]">
-                {(["1d", "5d", "1m", "1a"] as const).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setPeriodoGoogle(p)}
-                    className={`px-2.5 py-1 rounded-lg font-bold uppercase transition-all cursor-pointer ${
-                      periodoGoogle === p
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    }`}
+                {/* Reloj y Botón Actualizar */}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-950 px-3 py-1.5 border border-slate-200 dark:border-slate-800 text-[11px]">
+                    <Clock className="h-3.5 w-3.5 text-emerald-500 animate-spin" />
+                    <span className="text-slate-600 dark:text-slate-300 font-mono font-medium whitespace-nowrap">
+                      Última act: {lastUpdatedTime || "En línea"}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => fetchLiveRates(true)}
+                    disabled={isRefreshingManual}
+                    className="h-8 px-3 rounded-xl border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 hover:text-emerald-500 gap-1.5 cursor-pointer"
                   >
-                    {p}
-                  </button>
-                ))}
+                    <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingManual ? "animate-spin text-emerald-500" : ""}`} />
+                    <span>Actualizar</span>
+                  </Button>
+                </div>
+
               </div>
+
             </div>
 
             {loadingRates ? (
@@ -698,7 +707,6 @@ export default function ConfiguracionPage() {
               </div>
             </div>
 
-            {/* Diseño Flex / Column adaptable para celulares, tablets y notebooks */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 pt-2 text-xs">
               
               <div className="flex-1 space-y-1.5">
@@ -726,7 +734,6 @@ export default function ConfiguracionPage() {
                 </select>
               </div>
 
-              {/* Botón de Intercambio (Swap ⇄) centrado */}
               <div className="flex justify-center sm:pb-0.5">
                 <Button
                   type="button"
@@ -908,7 +915,7 @@ export default function ConfiguracionPage() {
           </div>
         </div>
 
-        {/* COLUMNA DERECHA (Se ubica debajo en iPad/tablets y al lado en pantallas grandes) */}
+        {/* COLUMNA DERECHA */}
         <div className="space-y-6">
           
           <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-6 shadow-xl transition-colors">
