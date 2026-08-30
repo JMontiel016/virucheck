@@ -2,9 +2,6 @@
  * ============================================================================
  * MÓDULO PROFESIONAL DE MOVIMIENTOS, CUOTAS Y MULTIDIVISA - VIRUCHECK
  * ============================================================================
- * - Conversión exacta de monedas extranjeras (USD, EUR, etc.) a Guaraníes.
- * - Símbolos de moneda dinámicos y textos profesionales opcionales.
- * - Compatibilidad total adaptativa en celulares, tablets y portátiles.
  */
 
 "use client";
@@ -64,8 +61,8 @@ import {
 interface TransactionItem {
   id: string;
   userId: string;
-  amount: number; // Monto en Guaraníes (balance general)
-  originalAmount?: number; // Monto en moneda original
+  amount: number;
+  originalAmount?: number;
   currency: string;
   exchangeRate?: number;
   type: "income" | "expense";
@@ -595,8 +592,9 @@ export default function MovimientosPage() {
       } else {
         if (isInstallment) {
           const totalInst = parseInt(installmentTotal) || 12;
-          const monthlyAmount = installmentMode === "fixed" ? amountInPYG : finalAmountToSave / totalInst;
-          const monthlyOriginal = cleanAmtOriginal / totalInst;
+          // MONTO FIJO: Se asigna el monto neto completo en cada mes del plazo indicado sin dividirlo
+          const monthlyAmount = amountInPYG;
+          const monthlyOriginal = cleanAmtOriginal;
           const [y, m, d] = formDate.split("-").map(Number);
 
           for (let i = 1; i <= totalInst; i++) {
@@ -1213,7 +1211,7 @@ export default function MovimientosPage() {
                           onChange={(e) => setInstallmentMode(e.target.value as any)}
                           className="w-full h-9 rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 px-3 text-xs text-slate-900 dark:text-slate-100 outline-none font-medium cursor-pointer"
                         >
-                          <option value="fixed">Monto Fijo Mensual (Sin Interés adicional)</option>
+                          <option value="fixed">Monto Fijo Mensual (Monto neto completo en cada mes)</option>
                           <option value="interest">Monto Total con % de Interés</option>
                         </select>
                       </div>
